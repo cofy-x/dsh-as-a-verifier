@@ -1,6 +1,6 @@
 /**
  * Pairwise verifier prompt derived from llm-as-a-verifier at commit
- * 115de305f23ed89bc42e86e010853c40059f3f7d (MIT).
+ * 8db8a114355a9d7fdf9a8d1d5c87f6aeebd18770 (MIT).
  * @module dsh-as-a-verifier/reward/prompt
  */
 

@@ -1,6 +1,6 @@
 /**
  * Public verifier service and orchestration derived in part from
- * llm-as-a-verifier at commit 115de305f23ed89bc42e86e010853c40059f3f7d
+ * llm-as-a-verifier at commit 8db8a114355a9d7fdf9a8d1d5c87f6aeebd18770
  * (MIT), including repeated A/B swapping and the two-phase PPT flow.
  * @module dsh-as-a-verifier/service
  */

@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import type { VerifierUsage } from '../types.ts'
 
-const CACHE_VERSION = 1
+const CACHE_VERSION = 2
 
 export interface ScoreCacheKey {
   readonly promptVersion: string

@@ -1,6 +1,6 @@
 /**
  * Fine-grained score-token expectation derived from llm-as-a-verifier at
- * commit 115de305f23ed89bc42e86e010853c40059f3f7d (MIT).
+ * commit 8db8a114355a9d7fdf9a8d1d5c87f6aeebd18770 (MIT).
  * @module dsh-as-a-verifier/reward/score
  */
 
@@ -35,7 +35,11 @@ function alternativesAfterTag(distribution: TokenDistribution, tag: string): rea
     let found: readonly TokenAlternative[] | undefined
     let generated = ''
     for (let index = 0; index < distribution.tokens.length; index += 1) {
-      generated += distribution.tokens[index]
+      const token = distribution.tokens[index] ?? ''
+      generated += token
+      // Upstream #10/#11: whitespace leaves the stripped suffix unchanged and
+      // must not shadow the distribution captured at the actual tag boundary.
+      if (token.trim().length === 0) continue
       if (generated.trimEnd().endsWith(suffix)) found = distribution.positionLogprobs[index + 1]
     }
     if (found !== undefined) return found
