@@ -15,6 +15,12 @@ dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier
 dsh plugin --profile headless add github:omdsh-dev/dsh-as-a-verifier
 ```
 
+不带 ref 的 GitHub spec 会在 pnpm 安装或更新时解析仓库默认分支；选中的 commit 随后由 Profile lockfile 固定，重启 DSH 不会静默追踪新提交。升级需要显式执行并重启 Profile：
+
+```sh
+dsh plugin --profile web update dsh-as-a-verifier
+```
+
 Git 安装会执行本包的自包含 `prepare` 构建。pnpm 10 及以上需要在目标 profile 的 `pnpm-workspace.yaml` 中做一次显式授权；复制首次安装报错给出的包键，然后重试：
 
 ```yaml
@@ -22,11 +28,13 @@ allowBuilds:
   dsh-as-a-verifier: true
 ```
 
-生产使用建议锁定审核过的 commit：
+需要稳定复现的生产部署应固定不可移动的 release tag（或审核过的 commit）：
 
 ```sh
-dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#<commit>
+dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.1
 ```
+
+Release tag 只从完成全部验证并合入 `main` 的 commit 创建，且绝不移动。向后兼容的修复与 capability 增量提升 patch 版本；新增公共 API 提升 minor 版本；不兼容的 `ctx.verifier` 合同必须提升 protocol version 与 major 版本。
 
 安装后，`dsh --profile web --dump-config`（或对应的 Headless profile）应只出现一行 `dsh-as-a-verifier`。
 
@@ -34,7 +42,7 @@ dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#<commit>
 
 ## API
 
-插件导出 `name`、`inject`、`Config` 和 `apply`，没有 default export。只强制依赖 `tools`；credentials 与 launch-environment 均为可选服务。
+插件导出 `name`、`inject`、`Config` 和 `apply`，没有 default export。只强制依赖 `tools`；credentials 与 launch-environment 均为可选服务。consumer 可通过 `ctx.verifier.protocolVersion` 在工作开始前拒绝不兼容 provider，并通过 `ctx.verifier.capabilities` 检查所需能力。
 
 ```ts
 const comparison = await ctx.verifier.compare({

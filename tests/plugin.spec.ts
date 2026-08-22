@@ -20,7 +20,13 @@ describe('dsh-as-a-verifier plugin', () => {
 
   it('mounts ctx.verifier and the keyless canonical tool, then removes both', async () => {
     const harness = await createPluginHarness()
-    expect(harness.ctx.get('verifier')).toBeDefined()
+    expect(harness.ctx.verifier.protocolVersion).toBe(1)
+    expect(harness.ctx.verifier.capabilities).toEqual({
+      pairwiseComparison: true,
+      candidateSelection: true,
+      offlineProgressTracking: true,
+      onlineProgressTracking: true,
+    })
     expect(harness.tools.map(tool => tool.name)).toEqual(['verifier_select', 'verifier_track'])
     const tool = harness.tools[0]
     const result = await tool?.execute({
