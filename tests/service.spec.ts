@@ -11,6 +11,18 @@ const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))) })
 
 describe('verifier service', () => {
+  it('publishes an immutable protocol and capability contract', () => {
+    const service = new VerifierService(resolvedConfig(), new PromptBackend(), new ScoreCache('unused', false))
+    expect(service.protocolVersion).toBe(1)
+    expect(service.capabilities).toEqual({
+      pairwiseComparison: true,
+      candidateSelection: true,
+      offlineProgressTracking: true,
+      onlineProgressTracking: true,
+    })
+    expect(Object.isFrozen(service.capabilities)).toBe(true)
+  })
+
   it('tracks default checkpoints with one call per evaluation and strict progress scores', async () => {
     const backend = new PromptBackend()
     const service = new VerifierService(resolvedConfig(), backend, new ScoreCache('unused', false))

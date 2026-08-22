@@ -15,6 +15,12 @@ dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier
 dsh plugin --profile headless add github:omdsh-dev/dsh-as-a-verifier
 ```
 
+An unqualified GitHub spec resolves the repository's default branch when pnpm installs or updates it. The selected commit is then frozen by the Profile lockfile; restarting DSH does not silently advance it. Update explicitly and restart the Profile:
+
+```sh
+dsh plugin --profile web update dsh-as-a-verifier
+```
+
 A Git install executes this package's self-contained `prepare` build. pnpm 10 and newer require a one-time explicit authorization in the selected profile's `pnpm-workspace.yaml`; copy the package key from the first installation error, then retry:
 
 ```yaml
@@ -22,11 +28,13 @@ allowBuilds:
   dsh-as-a-verifier: true
 ```
 
-Pin a reviewed commit for reproducible installations:
+For a reproducible stable deployment, pin the immutable release tag (or an audited commit):
 
 ```sh
-dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#<commit>
+dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.1
 ```
+
+Release tags are created only from a validated merge on `main` and are never moved. Backward-compatible fixes and capability additions increment the patch version; public API additions increment the minor version; an incompatible `ctx.verifier` contract requires a new protocol version and a major release.
 
 After installation, `dsh --profile web --dump-config` or the corresponding Headless profile should show exactly one `dsh-as-a-verifier` row.
 
@@ -34,7 +42,7 @@ Set `DEEPSEEK_API_KEY` in a Harness-supported credential source or launch enviro
 
 ## API
 
-The function plugin exports `name`, `inject`, `Config`, and `apply` with no default export. It requires only `tools`; credentials and launch-environment services are optional.
+The function plugin exports `name`, `inject`, `Config`, and `apply` with no default export. It requires only `tools`; credentials and launch-environment services are optional. Consumers can fail early against incompatible providers through `ctx.verifier.protocolVersion` and feature-test `ctx.verifier.capabilities` before starting work.
 
 ```ts
 const comparison = await ctx.verifier.compare({

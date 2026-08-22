@@ -15,6 +15,8 @@ import { buildPairwisePrompt, PROMPT_VERSION } from './reward/prompt.ts'
 import { extractExpectedScore } from './reward/score.ts'
 import { bradleyTerry, pivotRoundPairs, ringCycle, selectPivots, type DirectedPair } from './tournament/ppt.ts'
 import {
+  VERIFIER_CAPABILITIES,
+  VERIFIER_PROTOCOL_VERSION,
   VerifierError,
   type VerifierCompareRequest,
   type VerifierCompareResult,
@@ -96,6 +98,8 @@ async function settleStrict<T>(tasks: readonly Promise<T>[]): Promise<T[]> {
 
 /** Native TypeScript implementation of fine-grained pair scoring and PPT selection. */
 export class VerifierService implements VerifierServiceApi {
+  readonly protocolVersion = VERIFIER_PROTOCOL_VERSION
+  readonly capabilities = VERIFIER_CAPABILITIES
   private accepting = true
   private readonly controllers = new Set<AbortController>()
   private readonly operations = new Set<Promise<unknown>>()

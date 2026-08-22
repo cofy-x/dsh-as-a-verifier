@@ -13,8 +13,9 @@ export type { BackendScoreRequest, BackendScoreResponse, DeepSeekBackendOptions,
 export { ScoreCache, scoreCacheDigest } from './cache/score-cache.ts'
 export { ProgressCache, progressCacheDigest } from './cache/progress-cache.ts'
 export { VerifierService } from './service.ts'
-export { VerifierError } from './types.ts'
+export { VERIFIER_CAPABILITIES, VERIFIER_PROTOCOL_VERSION, VerifierError } from './types.ts'
 export type {
+  VerifierCapabilities,
   VerifierCandidateScore,
   VerifierCompareRequest,
   VerifierCompareResult,

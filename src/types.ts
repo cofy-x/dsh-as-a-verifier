@@ -1,5 +1,24 @@
 /** Public verifier request and result vocabulary. @module dsh-as-a-verifier/types */
 
+/** Current structural contract implemented by `ctx.verifier`. */
+export const VERIFIER_PROTOCOL_VERSION = 1 as const
+
+/** Feature discovery for consumers that can operate against several provider releases. */
+export interface VerifierCapabilities {
+  readonly pairwiseComparison: boolean
+  readonly candidateSelection: boolean
+  readonly offlineProgressTracking: boolean
+  readonly onlineProgressTracking: boolean
+}
+
+/** Capabilities shipped by this provider release. */
+export const VERIFIER_CAPABILITIES: Readonly<VerifierCapabilities> = Object.freeze({
+  pairwiseComparison: true,
+  candidateSelection: true,
+  offlineProgressTracking: true,
+  onlineProgressTracking: true,
+})
+
 /** One independently scored, trajectory-observable evaluation criterion. */
 export interface VerifierCriterion {
   readonly id: string
@@ -107,6 +126,8 @@ export interface VerifierProgressTracker {
 
 /** Public service provided as `ctx.verifier`. */
 export interface VerifierServiceApi {
+  readonly protocolVersion: typeof VERIFIER_PROTOCOL_VERSION
+  readonly capabilities: Readonly<VerifierCapabilities>
   compare(request: VerifierCompareRequest): Promise<VerifierCompareResult>
   select(request: VerifierSelectRequest): Promise<VerifierSelectResult>
   track(request: VerifierTrackRequest): Promise<VerifierTrackResult>
