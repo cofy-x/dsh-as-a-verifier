@@ -4,9 +4,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import { DeepSeekBackend } from './backend/deepseek.ts'
 import { ScoreCache } from './cache/score-cache.ts'
+import { ProgressCache } from './cache/progress-cache.ts'
 import { resolveConfig, type Config } from './config.ts'
 import { VerifierService } from './service.ts'
-import { registerVerifierTool } from './tools.ts'
+import { registerVerifierTools } from './tools.ts'
 import { VerifierError, type VerifierServiceApi } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -34,8 +35,8 @@ export function apply(ctx: Context, config: Config): void {
   }
   const backend = new DeepSeekBackend({ config: resolved, resolveApiKey })
   const cache = new ScoreCache(resolved.dataDir, resolved.cacheEnabled)
-  const verifier = new VerifierService(resolved, backend, cache)
+  const verifier = new VerifierService(resolved, backend, cache, new ProgressCache(resolved.dataDir, resolved.cacheEnabled))
   ctx.provide('verifier', verifier)
-  registerVerifierTool(ctx, verifier)
+  registerVerifierTools(ctx, verifier)
   ctx.effect(() => async () => { await verifier.dispose() }, 'dsh-as-a-verifier: operations')
 }

@@ -2,9 +2,9 @@
 
 [English](README.md) | 中文
 
-`dsh-as-a-verifier` 是独立的 DeepSeek Harness function plugin：用细粒度 token logprob reward 比较两条 Agent 轨迹，并通过 Probabilistic Pivot Tournament（PPT）从 N 个候选中选优。插件同时提供 `ctx.verifier` 与模型工具 `verifier_select`。
+`dsh-as-a-verifier` 是独立的 DeepSeek Harness function plugin：比较两条 Agent 轨迹、通过 Probabilistic Pivot Tournament（PPT）从 N 个候选中选优，并评分单条轨迹的执行进展。插件提供 `ctx.verifier` 与模型工具 `verifier_select`、`verifier_track`。
 
-MVP 采用 TypeScript 原生实现。A–T logprob reward、prompt 结构、A/B 槽位交换、Bradley–Terry 聚合和 PPT 策略源自 `llm-as-a-verifier` 的 commit `115de305f23ed89bc42e86e010853c40059f3f7d`。完整归属见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+TypeScript 原生实现的 pairwise reward、PPT 与离线/在线 A–T progress tracking 源自 `llm-as-a-verifier` 的 commit `115de305f23ed89bc42e86e010853c40059f3f7d`。完整归属见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 安装
 
@@ -60,11 +60,25 @@ const selection = await ctx.verifier.select({
   pivots: 2,
   seed: 0,
 })
+
+const progress = await ctx.verifier.track({
+  problem: '修复解析器失败测试。',
+  steps: ['复现失败。', '修改解析器。', '运行测试并通过。'],
+  checkpointSteps: [1, 3],
+})
+
+const tracker = ctx.verifier.createProgressTracker({ problem: '修复解析器失败测试。' })
+await tracker.update('检查并复现失败。')
+await tracker.update('实现修复并运行定向测试。')
+const onlineProgress = tracker.result()
+await tracker.dispose()
 ```
 
 `compare()` 返回 `[0,1]` reward、逐 criterion reward、真实 verifier 调用数和 token usage。`select()` 返回 `selectedIndex`、`best`、完整索引 ranking、按候选索引排列的分数、comparison/call 数、校验后的 criteria 与 token usage。单候选会直接返回，不读取凭据、不访问网络。
 
-`verifier_select` 接受同样的 problem、字符串 candidates 和 criteria，可选参数为 `n_evaluations`、`pivots`、`seed`；部署上限始终优先于工具输入。工具使用 generic card，不声明文件位置。
+`track()` 返回 checkpoint 分数、逐 evaluation 原始曲线、最终分数、调用数和 usage。超过两个 step 时默认评分 `2..T-1`，更短轨迹评分全部 step；checkpoint 使用 1-based、唯一且严格递增的编号。`createProgressTracker()` 每次只评分当时可见的完整 prefix，未来步骤不会影响过去分数。
+
+`verifier_select` 接受同样的 problem、字符串 candidates 和 criteria，可选参数为 `n_evaluations`、`pivots`、`seed`；`verifier_track` 接受 `problem`、`steps`、可选 `checkpoint_steps` 与 `n_evaluations`。部署上限始终优先，两个工具都使用 generic card 且不声明文件位置。
 
 ## 配置
 
@@ -79,6 +93,10 @@ const selection = await ctx.verifier.select({
 | `pivots` / `maxPivots` | `2` / `8` | PPT pivot 默认值与部署上限 |
 | `maxCandidates` | `16` | 候选上限 |
 | `maxCriteria` | `8` | criterion 上限 |
+| `maxProgressSteps` | `256` | progress 轨迹 step 上限 |
+| `maxProgressCheckpoints` | `64` | 单次请求 checkpoint 上限 |
+| `maxProgressStepChars` | `32768` | 单个 step 字符上限 |
+| `maxProgressTrajectoryChars` | `262144` | progress 轨迹总字符上限 |
 | `maxConcurrency` | `8` | 最大并行 HTTP 调用数 |
 | `requestTimeoutMs` | `120000` | 每次 HTTP attempt 超时 |
 | `retryAttempts` | `3` | 可重试错误的总 attempt 数 |
@@ -98,15 +116,15 @@ comparisons = N + k(N - k) + k(k - 1) / 2
 verifier calls = comparisons × criteria × nEvaluations
 ```
 
-`compare()` 的调用数是 `criteria × nEvaluations`。缓存命中的评分不会增加本次运行的实际调用数或 token usage；供应商计费取决于返回的缓存/非缓存输入、输出和 reasoning token。
+`compare()` 的调用数是 `criteria × nEvaluations`。离线 progress 无论 checkpoint 数量多少都只使用 `nEvaluations` 次调用；在线 tracker 每次 update 使用 `nEvaluations` 次调用。缓存命中不会增加本次运行的实际调用数或 token usage。
 
-缺少 score-position logprobs、没有有效 A–T alternative、JSON 畸形、usage 非法或部分评分失败都会让整个操作失败。插件绝不伪造 `0.5/0.5` 平局。只有传输错误、HTTP 429 和 HTTP 5xx 会重试；认证、协议和内容错误不重试。合法 `Retry-After` 会在有界延迟内被尊重。fiber dispose 会停止接收新操作、中止活跃请求并等待其收敛。
+缺少 score-position logprobs、没有有效 A–T alternative、JSON 畸形、usage 非法或部分评分失败都会让整个操作失败。插件绝不伪造 `0.5/0.5` 平局或 `0.5` progress，也不会从采样文本回退解析 progress。只有传输错误、HTTP 429 和 HTTP 5xx 会重试；认证、协议和内容错误不重试。合法 `Retry-After` 会在有界延迟内被尊重。fiber dispose 会停止接收新操作、中止活跃请求并等待其收敛。
 
 ## 缓存与数据外发
 
-缓存 identity 包含 prompt/schema version、backend、model、problem、有序候选、完整 criterion、repeat 与 slot order，再用 SHA-256 生成地址。版本化条目采用原子替换和 owner-only 权限；损坏或版本不匹配一律按 miss 处理。
+Pairwise 与 progress 使用独立版本化缓存。Progress identity 包含 backend、model、prompt version、problem、完整 steps、checkpoints 和 repeat；pairwise 保留原有 identity。全部 identity 在写入文件系统前使用 SHA-256。损坏或版本不匹配一律按 miss 处理。
 
-缓存文件只保存数值 reward 和 token usage，不保存原始任务、候选轨迹、prompt、模型响应、API key 或 reasoning trace。API 调用必然会把 problem、当前比较的两个候选和一个 criterion 发给配置的 DeepSeek endpoint。凭据在每次 HTTP 请求前重新解析，从不进入配置、日志、缓存或测试快照。
+缓存文件只保存数值 reward 和 token usage，不保存原始任务、候选轨迹、prompt、模型响应、API key 或 reasoning trace。API 调用会发送 problem 与相关轨迹：pairwise 是两个候选和一个 criterion，progress 是全部 steps 与 checkpoints。凭据在每次 HTTP 请求前重新解析，从不进入配置、日志、缓存或测试快照。
 
 ## 开发
 
@@ -121,9 +139,9 @@ pnpm run prepare
 
 真实 provider e2e 不属于 keyless CI；没有 `DEEPSEEK_API_KEY` 时应明确 self-skip。
 
-## MVP 边界
+## 边界
 
-MVP 不包含在线 progress tracking、`verified_ralph`、多模态、Vertex/OpenAI-compatible backend、Web 面板、coding worktree、价格换算或透明模型代理。`verified_ralph` 是下一阶段计划中的第一个 consumer。
+本包不包含 `verified_ralph`、多模态、Vertex/OpenAI-compatible backend、Web 面板、coding worktree、价格换算或透明模型代理；`dsh-verified-ralph` 是独立 consumer 插件。
 
 ## 许可
 

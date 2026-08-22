@@ -20,6 +20,10 @@ export interface Config {
   readonly maxPivots?: number
   readonly maxCandidates?: number
   readonly maxCriteria?: number
+  readonly maxProgressSteps?: number
+  readonly maxProgressCheckpoints?: number
+  readonly maxProgressStepChars?: number
+  readonly maxProgressTrajectoryChars?: number
   readonly maxConcurrency?: number
   readonly requestTimeoutMs?: number
   readonly retryAttempts?: number
@@ -40,6 +44,10 @@ export interface ResolvedConfig {
   readonly maxPivots: number
   readonly maxCandidates: number
   readonly maxCriteria: number
+  readonly maxProgressSteps: number
+  readonly maxProgressCheckpoints: number
+  readonly maxProgressStepChars: number
+  readonly maxProgressTrajectoryChars: number
   readonly maxConcurrency: number
   readonly requestTimeoutMs: number
   readonly retryAttempts: number
@@ -60,6 +68,10 @@ export const Config = z.object({
   maxPivots: z.natural().default(8),
   maxCandidates: z.natural().default(16),
   maxCriteria: z.natural().default(8),
+  maxProgressSteps: z.natural().default(256),
+  maxProgressCheckpoints: z.natural().default(64),
+  maxProgressStepChars: z.natural().default(32_768),
+  maxProgressTrajectoryChars: z.natural().default(262_144),
   maxConcurrency: z.natural().default(8),
   requestTimeoutMs: z.natural().default(120_000),
   retryAttempts: z.natural().default(3),
@@ -125,6 +137,10 @@ export function resolveConfig(config: Config, environment?: ConfigEnvironment): 
     maxPivots,
     maxCandidates: positiveSafe(config.maxCandidates ?? 16, 'maxCandidates'),
     maxCriteria: positiveSafe(config.maxCriteria ?? 8, 'maxCriteria'),
+    maxProgressSteps: positiveSafe(config.maxProgressSteps ?? 256, 'maxProgressSteps'),
+    maxProgressCheckpoints: positiveSafe(config.maxProgressCheckpoints ?? 64, 'maxProgressCheckpoints'),
+    maxProgressStepChars: positiveSafe(config.maxProgressStepChars ?? 32_768, 'maxProgressStepChars'),
+    maxProgressTrajectoryChars: positiveSafe(config.maxProgressTrajectoryChars ?? 262_144, 'maxProgressTrajectoryChars'),
     maxConcurrency: positiveSafe(config.maxConcurrency ?? 8, 'maxConcurrency'),
     requestTimeoutMs,
     retryAttempts: positiveSafe(config.retryAttempts ?? 3, 'retryAttempts'),

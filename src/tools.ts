@@ -4,9 +4,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { VerifierServiceApi } from './types.ts'
 
-/** Register the canonical best-of-N verifier tool on the scoped registry. */
-export function registerVerifierTool(ctx: Context, verifier: VerifierServiceApi): void {
-  const unregister = ctx.tools.register(defineTool({
+/** Register the canonical verifier tools on the scoped registry. */
+export function registerVerifierTools(ctx: Context, verifier: VerifierServiceApi): void {
+  const unregisterSelect = ctx.tools.register(defineTool({
     name: 'verifier_select',
     description: 'Select and rank the strongest candidate answer or agent trajectory using fine-grained DeepSeek logprob rewards and a probabilistic pivot tournament.',
     parameters: {
@@ -128,5 +128,73 @@ export function registerVerifierTool(ctx: Context, verifier: VerifierServiceApi)
       }
     },
   }))
-  ctx.effect(() => unregister, 'dsh-as-a-verifier: verifier_select')
+  const unregisterTrack = ctx.tools.register(defineTool({
+    name: 'verifier_track',
+    description: 'Score progress at selected checkpoints of one agent trajectory using strict DeepSeek A-T logprob expectations.',
+    parameters: {
+      problem: { type: 'string', required: true, description: 'The task the agent is attempting.' },
+      steps: {
+        type: 'array', required: true, items: { type: 'string' },
+        description: 'Ordered agent steps, each containing the action and its observed output.',
+      },
+      checkpoint_steps: {
+        type: 'array', items: { type: 'integer' },
+        description: 'Optional strictly increasing 1-based step numbers to score.',
+      },
+      n_evaluations: {
+        type: 'integer', description: 'Independent verifier repeats, constrained by deployment policy.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          steps: { type: 'array', items: { type: 'integer' }, required: true },
+          scores: { type: 'array', items: { type: 'number' }, required: true },
+          perEvaluationScores: {
+            type: 'array', required: true, items: { type: 'array', items: { type: 'number' } },
+          },
+          final: { type: 'number', required: true },
+          verifierCalls: { type: 'integer', required: true },
+          usage: {
+            type: 'object', required: true, additionalProperties: false,
+            properties: {
+              calls: { type: 'integer', required: true },
+              inputTokens: { type: 'integer', required: true },
+              cachedInputTokens: { type: 'integer', required: true },
+              uncachedInputTokens: { type: 'integer', required: true },
+              outputTokens: { type: 'integer', required: true },
+              reasoningTokens: { type: 'integer', required: true },
+              cacheHitRate: { type: 'number', required: true },
+            },
+          },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
+    },
+    isConcurrencySafe: () => true,
+    presentCall: args => ({ card: 'generic', title: 'Track trajectory progress', kind: 'execute', rawInput: args.problem }),
+    presentResult: () => ({ card: 'generic', title: 'Progress tracking complete' }),
+    execute: async (args, exec) => {
+      const result = await verifier.track({
+        problem: args.problem,
+        steps: args.steps,
+        ...(args.checkpoint_steps === undefined ? {} : { checkpointSteps: args.checkpoint_steps }),
+        ...(args.n_evaluations === undefined ? {} : { nEvaluations: args.n_evaluations }),
+        signal: exec.signal,
+      })
+      return {
+        ...result,
+        steps: [...result.steps],
+        scores: [...result.scores],
+        perEvaluationScores: result.perEvaluationScores.map(scores => [...scores]),
+        usage: { ...result.usage },
+      }
+    },
+  }))
+  ctx.effect(() => () => {
+    unregisterTrack()
+    unregisterSelect()
+  }, 'dsh-as-a-verifier: verifier tools')
 }

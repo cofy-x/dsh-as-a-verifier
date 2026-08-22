@@ -8,7 +8,7 @@ Upstream source: `https://github.com/llm-as-a-verifier/llm-as-a-verifier`
 
 Pinned source revision: `115de305f23ed89bc42e86e010853c40059f3f7d`
 
-This project derives and natively ports to TypeScript the pairwise evaluation prompt structure, the A–T fine-grained token-logprob reward, A/B slot swapping, Bradley–Terry soft-win aggregation, and Probabilistic Pivot Tournament from that revision. Derived source modules carry a source header. The port intentionally uses a stable JavaScript PRNG and does not claim byte-for-byte agreement with Python `random` permutations.
+This project derives and natively ports to TypeScript the pairwise evaluation prompt structure, the A–T fine-grained token-logprob reward, A/B slot swapping, Bradley–Terry soft-win aggregation, Probabilistic Pivot Tournament, and the A–T trajectory progress prompt/decoder from that revision. Derived source modules carry a source header. The port intentionally uses a stable JavaScript PRNG and does not claim byte-for-byte agreement with Python `random` permutations.
 
 The upstream work is provided under the following MIT License:
 

@@ -11,6 +11,53 @@ const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))) })
 
 describe('verifier service', () => {
+  it('tracks default checkpoints with one call per evaluation and strict progress scores', async () => {
+    const backend = new PromptBackend()
+    const service = new VerifierService(resolvedConfig(), backend, new ScoreCache('unused', false))
+    const result = await service.track({ problem: 'task', steps: ['inspect', 'edit', 'verify', 'finish'] })
+    expect(result.steps).toEqual([2, 3])
+    expect(result.scores).toEqual([10 / 19, 1])
+    expect(result.perEvaluationScores).toEqual([[10 / 19, 1], [10 / 19, 1]])
+    expect(result.final).toBe(1)
+    expect(result.verifierCalls).toBe(2)
+  })
+
+  it('enforces progress bounds and strictly increasing checkpoints', async () => {
+    const service = new VerifierService(resolvedConfig({ maxProgressSteps: 2 }), new PromptBackend(), new ScoreCache('unused', false))
+    await expect(service.track({ problem: 'task', steps: [] })).rejects.toThrow(/must not be empty/)
+    await expect(service.track({ problem: 'task', steps: ['a', 'b', 'c'] })).rejects.toThrow(/configured maximum/)
+    await expect(service.track({ problem: 'task', steps: ['a', 'b'], checkpointSteps: [2, 1] })).rejects.toThrow(/strictly increasing/)
+    await expect(service.track({ problem: 'task', steps: ['a'], checkpointSteps: [2] })).rejects.toThrow(/within 1..1/)
+  })
+
+  it('tracks online prefixes without future steps and rejects concurrent updates', async () => {
+    const prompts: string[] = []
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const backend = new PromptBackend()
+    const original = backend.score.bind(backend)
+    backend.score = async request => {
+      prompts.push(request.prompt)
+      if (prompts.length === 1) await gate
+      return original(request)
+    }
+    const service = new VerifierService(resolvedConfig({ nEvaluations: 1 }), backend, new ScoreCache('unused', false))
+    const tracker = service.createProgressTracker({ problem: 'task', nEvaluations: 1 })
+    expect(() => tracker.result()).toThrow(/no scored steps/)
+    const first = tracker.update('inspect')
+    await Promise.resolve()
+    await expect(tracker.update('future edit')).rejects.toMatchObject({ code: 'OPERATION_IN_PROGRESS' })
+    release()
+    await expect(first).resolves.toBe(1)
+    await tracker.update('verify')
+    expect(prompts[0]).not.toContain('future edit')
+    expect(prompts[0]).not.toContain('verify')
+    expect(prompts[1]).toContain('inspect')
+    expect(prompts[1]).toContain('verify')
+    expect(tracker.result()).toMatchObject({ steps: [1, 2], scores: [1, 1], verifierCalls: 2 })
+    await tracker.dispose()
+    await expect(tracker.update('later')).rejects.toMatchObject({ code: 'DISPOSED' })
+  })
   it('cancels slot bias through repeated A/B swapping', async () => {
     const backend = new PromptBackend()
     const service = new VerifierService(resolvedConfig(), backend, new ScoreCache('unused', false))

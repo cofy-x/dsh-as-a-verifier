@@ -75,10 +75,42 @@ export interface VerifierSelectResult {
   readonly usage: VerifierUsage
 }
 
+/** Score selected 1-based checkpoints along one agent trajectory. */
+export interface VerifierTrackRequest extends VerifierOperationOptions {
+  readonly problem: string
+  readonly steps: readonly string[]
+  readonly checkpointSteps?: readonly number[]
+}
+
+/** Strict progress curve decoded independently for every evaluation repeat. */
+export interface VerifierTrackResult {
+  readonly steps: readonly number[]
+  readonly scores: readonly number[]
+  readonly perEvaluationScores: readonly (readonly number[])[]
+  readonly final: number
+  readonly verifierCalls: number
+  readonly usage: VerifierUsage
+}
+
+/** Options captured by an online prefix-only progress tracker. */
+export interface VerifierProgressTrackerOptions {
+  readonly problem: string
+  readonly nEvaluations?: number
+}
+
+/** Stateful prefix tracker owned by the verifier plugin lifecycle. */
+export interface VerifierProgressTracker {
+  update(step: string, options?: { readonly signal?: AbortSignal }): Promise<number>
+  result(): VerifierTrackResult
+  dispose(): Promise<void>
+}
+
 /** Public service provided as `ctx.verifier`. */
 export interface VerifierServiceApi {
   compare(request: VerifierCompareRequest): Promise<VerifierCompareResult>
   select(request: VerifierSelectRequest): Promise<VerifierSelectResult>
+  track(request: VerifierTrackRequest): Promise<VerifierTrackResult>
+  createProgressTracker(options: VerifierProgressTrackerOptions): VerifierProgressTracker
 }
 
 /** Stable machine-readable verifier failure. */

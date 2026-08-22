@@ -74,5 +74,6 @@ describe('Web and Headless bundle composition', () => {
     const ctx = await boot(profile)
     expect(ctx.get('verifier')).toBeDefined()
     expect(ctx.tools.schemas().find(tool => tool.name === 'verifier_select')).toBeDefined()
+    expect(ctx.tools.schemas().find(tool => tool.name === 'verifier_track')).toBeDefined()
   })
 })
