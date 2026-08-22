@@ -29,6 +29,11 @@ if (!installRefPattern.test(ref)) {
 }
 
 const expected = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+const profilePeers = Object.keys(expected.peerDependencies ?? {}).map((name) => {
+  const version = expected.devDependencies?.[name]
+  if (typeof version !== 'string') throw new Error(`no audited smoke version is configured for peer ${name}`)
+  return `${name}@${version}`
+})
 const workspace = mkdtempSync(join(tmpdir(), 'dsh-as-a-verifier-git-smoke-'))
 try {
   writeFileSync(join(workspace, 'package.json'), JSON.stringify({ private: true, type: 'module' }, null, 2))
@@ -39,7 +44,7 @@ try {
     `  ${PACKAGE_NAME}@https://codeload.github.com/${REPOSITORY}/tar.gz/${ref}: true`,
     '',
   ].join('\n'))
-  run('pnpm', ['add', '--save-exact', `github:${REPOSITORY}#${ref}`], workspace)
+  run('pnpm', ['add', '--save-exact', `github:${REPOSITORY}#${ref}`, ...profilePeers], workspace)
 
   const require = createRequire(join(workspace, 'smoke.cjs'))
   const entry = require.resolve(PACKAGE_NAME)
