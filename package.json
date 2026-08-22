@@ -1,7 +1,7 @@
 {
   "name": "dsh-as-a-verifier",
   "description": "Fine-grained logprob verification and probabilistic pivot selection for DeepSeek Harness",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.7.0",
@@ -16,6 +16,8 @@
     "build": "tsc -b && tsdown",
     "test": "vitest run",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "smoke:git": "node scripts/git-install-smoke.mjs",
+    "verify:release": "node scripts/verify-release.mjs",
     "typecheck": "tsc -b --pretty false && tsc -p tsconfig.vitest.json --pretty false",
     "verify:self-contained": "node scripts/verify-self-contained.mjs",
     "prepare": "node scripts/prepare.mjs",
