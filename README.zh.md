@@ -15,11 +15,20 @@ dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier
 dsh plugin --profile headless add github:omdsh-dev/dsh-as-a-verifier
 ```
 
+Git 安装会执行本包的自包含 `prepare` 构建。pnpm 10 及以上需要在目标 profile 的 `pnpm-workspace.yaml` 中做一次显式授权；复制首次安装报错给出的包键，然后重试：
+
+```yaml
+allowBuilds:
+  dsh-as-a-verifier: true
+```
+
 生产使用建议锁定审核过的 commit：
 
 ```sh
 dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#<commit>
 ```
+
+安装后，`dsh --profile web --dump-config`（或对应的 Headless profile）应只出现一行 `dsh-as-a-verifier`。
 
 请在 Harness 支持的凭据源或启动环境中设置 `DEEPSEEK_API_KEY`。缺少凭据不会阻止插件加载或单候选短路；首次真正需要 API 的操作会明确失败。
 

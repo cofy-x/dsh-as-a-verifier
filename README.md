@@ -15,11 +15,20 @@ dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier
 dsh plugin --profile headless add github:omdsh-dev/dsh-as-a-verifier
 ```
 
+A Git install executes this package's self-contained `prepare` build. pnpm 10 and newer require a one-time explicit authorization in the selected profile's `pnpm-workspace.yaml`; copy the package key from the first installation error, then retry:
+
+```yaml
+allowBuilds:
+  dsh-as-a-verifier: true
+```
+
 Pin a reviewed commit for reproducible installations:
 
 ```sh
 dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#<commit>
 ```
+
+After installation, `dsh --profile web --dump-config` or the corresponding Headless profile should show exactly one `dsh-as-a-verifier` row.
 
 Set `DEEPSEEK_API_KEY` in a Harness-supported credential source or launch environment. Missing credentials do not block plugin loading or the single-candidate fast path; the first operation that needs the API fails clearly.
 
