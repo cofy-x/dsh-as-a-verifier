@@ -49,11 +49,14 @@ try {
   writeFileSync(join(workspace, 'pnpm-workspace.yaml'), [
     'packages:',
     "  - '.'",
-    'allowBuilds:',
-    `  ${PACKAGE_NAME}@https://codeload.github.com/${REPOSITORY}/tar.gz/${resolvedCommit}: true`,
+    'allowBuilds: {}',
     '',
   ].join('\n'))
-  run('pnpm', ['add', '--save-exact', `github:${REPOSITORY}#${ref}`, ...profilePeers], workspace)
+  run('pnpm', ['add', '--save-exact', `--allow-build=${PACKAGE_NAME}`, `github:${REPOSITORY}#${ref}`, ...profilePeers], workspace)
+
+  const buildPolicy = readFileSync(join(workspace, 'pnpm-workspace.yaml'), 'utf8')
+  const exactBuildApproval = `${PACKAGE_NAME}@https://codeload.github.com/${REPOSITORY}/tar.gz/${resolvedCommit}`
+  if (!buildPolicy.includes(exactBuildApproval)) throw new Error('pnpm did not generate an exact Git build approval')
 
   const require = createRequire(join(workspace, 'smoke.cjs'))
   const entry = require.resolve(PACKAGE_NAME)
