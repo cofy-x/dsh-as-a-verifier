@@ -31,13 +31,14 @@ function capture(command, args, cwd) {
 
 const ref = argument('--ref')
 const installRefPattern = new RegExp('^(?:[0-9a-f]{40}|v[0-9]+\\.[0-9]+\\.[0-9]+)$')
+const exactCommitPattern = new RegExp('^[0-9a-f]{40}$')
 if (!installRefPattern.test(ref)) {
   throw new Error('Git-install smoke ref must be an exact commit or release tag')
 }
-const resolvedCommit = /^[0-9a-f]{40}$/.test(ref)
+const resolvedCommit = exactCommitPattern.test(ref)
   ? ref
   : capture('git', ['rev-parse', `${ref}^{commit}`], root)
-if (!/^[0-9a-f]{40}$/.test(resolvedCommit)) throw new Error(`could not resolve ${ref} to an exact commit`)
+if (!exactCommitPattern.test(resolvedCommit)) throw new Error(`could not resolve ${ref} to an exact commit`)
 
 const expected = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const profilePeers = Object.keys(expected.peerDependencies ?? {}).map((name) => {
