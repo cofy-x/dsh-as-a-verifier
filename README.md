@@ -31,7 +31,7 @@ allowBuilds:
 For a reproducible stable deployment, pin the immutable release tag (or an audited commit):
 
 ```sh
-dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.2
+dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.3
 ```
 
 Release tags are created only from a validated merge on `main` and are never moved. Backward-compatible fixes and capability additions increment the patch version; public API additions increment the minor version; an incompatible `ctx.verifier` contract requires a new protocol version and a major release.
