@@ -4,7 +4,7 @@
 
 `dsh-as-a-verifier` 是独立的 DeepSeek Harness function plugin：比较两条 Agent 轨迹、通过 Probabilistic Pivot Tournament（PPT）从 N 个候选中选优，并评分单条轨迹的执行进展。插件提供 `ctx.verifier` 与模型工具 `verifier_select`、`verifier_track`。
 
-TypeScript 原生实现的 pairwise reward、PPT 与离线/在线 A–T progress tracking 源自 `llm-as-a-verifier` 的 commit `115de305f23ed89bc42e86e010853c40059f3f7d`。完整归属见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+TypeScript 原生实现的 pairwise reward、PPT 与离线/在线 A–T progress tracking 源自 llm-as-a-verifier（<https://github.com/llm-as-a-verifier/llm-as-a-verifier>）的 commit `8db8a114355a9d7fdf9a8d1d5c87f6aeebd18770`。完整归属见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 安装
 

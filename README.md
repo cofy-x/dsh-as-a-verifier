@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 `dsh-as-a-verifier` is a standalone DeepSeek Harness function plugin that compares trajectories, selects the best of N with a Probabilistic Pivot Tournament (PPT), and scores progress along one trajectory. It provides `ctx.verifier` plus the model-facing `verifier_select` and `verifier_track` tools.
 
-The native TypeScript implementation derives pairwise reward, PPT, and offline/online A–T progress tracking from `llm-as-a-verifier` at commit `115de305f23ed89bc42e86e010853c40059f3f7d`. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The native TypeScript implementation derives pairwise reward, PPT, and offline/online A–T progress tracking from llm-as-a-verifier (<https://github.com/llm-as-a-verifier/llm-as-a-verifier>) at commit `8db8a114355a9d7fdf9a8d1d5c87f6aeebd18770`. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Install
 

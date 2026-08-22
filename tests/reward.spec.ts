@@ -23,6 +23,17 @@ describe('fine-grained A-T reward', () => {
     }, '<score_A>')).toBeGreaterThan(0.99)
   })
 
+  it('does not let a whitespace token shadow the score-position alternatives', () => {
+    expect(extractExpectedScore({
+      tokens: ['<score_A>', ' ', 'A'],
+      positionLogprobs: [
+        [{ token: '<score_A>', logprob: 0 }],
+        [{ token: ' A', logprob: 0 }, { token: ' T', logprob: -10 }],
+        [{ token: 'A', logprob: -10 }, { token: 'T', logprob: 0 }],
+      ],
+    }, '<score_A>')).toBeGreaterThan(0.99)
+  })
+
   it('rejects missing positions and invalid alternatives', () => {
     expect(() => extractExpectedScore({ tokens: ['no score'], positionLogprobs: [[]] }, '<score_A>'))
       .toThrow(/did not expose logprobs/)
