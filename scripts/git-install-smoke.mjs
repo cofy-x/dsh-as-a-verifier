@@ -22,11 +22,23 @@ function run(command, args, cwd) {
   if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed with exit code ${result.status}`)
 }
 
+function capture(command, args, cwd) {
+  const result = spawnSync(command, args, { cwd, encoding: 'utf8' })
+  if (result.error !== undefined) throw result.error
+  if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed with exit code ${result.status}`)
+  return result.stdout.trim()
+}
+
 const ref = argument('--ref')
 const installRefPattern = new RegExp('^(?:[0-9a-f]{40}|v[0-9]+\\.[0-9]+\\.[0-9]+)$')
+const exactCommitPattern = new RegExp('^[0-9a-f]{40}$')
 if (!installRefPattern.test(ref)) {
   throw new Error('Git-install smoke ref must be an exact commit or release tag')
 }
+const resolvedCommit = exactCommitPattern.test(ref)
+  ? ref
+  : capture('git', ['rev-parse', `${ref}^{commit}`], root)
+if (!exactCommitPattern.test(resolvedCommit)) throw new Error(`could not resolve ${ref} to an exact commit`)
 
 const expected = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const profilePeers = Object.keys(expected.peerDependencies ?? {}).map((name) => {
@@ -36,12 +48,16 @@ const profilePeers = Object.keys(expected.peerDependencies ?? {}).map((name) => 
 })
 const workspace = mkdtempSync(join(tmpdir(), 'dsh-as-a-verifier-git-smoke-'))
 try {
-  writeFileSync(join(workspace, 'package.json'), JSON.stringify({ private: true, type: 'module' }, null, 2))
+  writeFileSync(join(workspace, 'package.json'), JSON.stringify({
+    private: true,
+    type: 'module',
+    packageManager: expected.packageManager,
+  }, null, 2))
   writeFileSync(join(workspace, 'pnpm-workspace.yaml'), [
     'packages:',
     "  - '.'",
     'allowBuilds:',
-    `  ${PACKAGE_NAME}@https://codeload.github.com/${REPOSITORY}/tar.gz/${ref}: true`,
+    `  '${PACKAGE_NAME}@https://codeload.github.com/${REPOSITORY}/tar.gz/${resolvedCommit}': true`,
     '',
   ].join('\n'))
   run('pnpm', ['add', '--save-exact', `github:${REPOSITORY}#${ref}`, ...profilePeers], workspace)

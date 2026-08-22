@@ -31,7 +31,7 @@ allowBuilds:
 需要稳定复现的生产部署应固定不可移动的 release tag（或审核过的 commit）：
 
 ```sh
-dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.2
+dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.3
 ```
 
 Release tag 只从完成全部验证并合入 `main` 的 commit 创建，且绝不移动。向后兼容的修复与 capability 增量提升 patch 版本；新增公共 API 提升 minor 版本；不兼容的 `ctx.verifier` 合同必须提升 protocol version 与 major 版本。
