@@ -1,0 +1,7 @@
+# Bundle patch applied over a selected DSH Web or Headless profile.
+- insert:
+    - id: dsh-as-a-verifier
+      name: dsh-as-a-verifier
+
+# No invariant row: the shipped Web and Headless profiles do not guarantee the
+# invariants service, and the MVP owns no long-lived event/data relationship.
