@@ -31,7 +31,7 @@ allowBuilds:
 需要稳定复现的生产部署应固定不可移动的 release tag（或审核过的 commit）：
 
 ```sh
-dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.1
+dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.2
 ```
 
 Release tag 只从完成全部验证并合入 `main` 的 commit 创建，且绝不移动。向后兼容的修复与 capability 增量提升 patch 版本；新增公共 API 提升 minor 版本；不兼容的 `ctx.verifier` 合同必须提升 protocol version 与 major 版本。
@@ -145,7 +145,9 @@ pnpm run build
 pnpm run prepare
 ```
 
-真实 provider e2e 不属于 keyless CI；没有 `DEEPSEEK_API_KEY` 时应明确 self-skip。
+每个 PR 与 `main` 更新都会在 Ubuntu、Windows 和 Node 22、24 上运行无密钥测试，再执行基于精确 commit 的 Git-install smoke。稳定的 `ci / required` 是受保护分支的合并门禁。Actions 只有仓库只读权限，也不会获得 DeepSeek 凭据。
+
+Release 继续采用人工确认的 Git-only 流程：先针对当前 `main` 的精确 commit 和 package version 运行只读 `release-check`，再创建 annotated tag，并通过 Hangar 的 devbox-x `remote-tag` 路径推送。Tag 触发的二次检查会验证 annotation、版本、`main` 历史、完整无密钥门禁以及从 tag 安装。Workflow 不创建或移动 tag，也不发布 npm。真实 provider e2e 保持在 CI 外；backend、prompt 或 score decoder 行为变化时必须进入 release 证据，其他变更在缺少 `DEEPSEEK_API_KEY` 时自行跳过。
 
 ## 边界
 

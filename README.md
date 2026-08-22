@@ -31,7 +31,7 @@ allowBuilds:
 For a reproducible stable deployment, pin the immutable release tag (or an audited commit):
 
 ```sh
-dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.1
+dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.2
 ```
 
 Release tags are created only from a validated merge on `main` and are never moved. Backward-compatible fixes and capability additions increment the patch version; public API additions increment the minor version; an incompatible `ctx.verifier` contract requires a new protocol version and a major release.
@@ -145,7 +145,9 @@ pnpm run build
 pnpm run prepare
 ```
 
-The optional real-provider e2e is intentionally outside keyless CI and should self-skip when `DEEPSEEK_API_KEY` is absent.
+Every pull request and `main` update runs the keyless suite on Ubuntu and Windows with Node 22 and 24, followed by an exact-commit Git-install smoke. The stable `ci / required` result is the protected-branch merge gate. Actions have read-only repository permission and receive no DeepSeek credential.
+
+Releases remain deliberate and Git-only. Run the read-only `release-check` workflow against the exact current `main` commit and package version, then create an annotated tag and push it through the Hangar devbox-x `remote-tag` path. A tag-triggered release check verifies the annotation, version, `main` ancestry, complete keyless suite, and installation from the tag. The workflow never creates or moves tags and never publishes npm artifacts. Real-provider e2e remains outside CI; it is required in the release evidence when backend, prompt, or score-decoder behavior changes and otherwise self-skips without `DEEPSEEK_API_KEY`.
 
 ## Boundaries
 
