@@ -1,7 +1,7 @@
 {
   "name": "dsh-as-a-verifier",
   "description": "Fine-grained logprob verification and probabilistic pivot selection for DeepSeek Harness",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.7.0",

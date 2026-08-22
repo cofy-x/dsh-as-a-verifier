@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ScoreCache, scoreCacheDigest, type ScoreCacheKey } from '../src/cache/score-cache.ts'
+import { ProgressCache, progressCacheDigest, type ProgressCacheKey } from '../src/cache/progress-cache.ts'
 import { zeroUsage } from './helpers.ts'
 
 const roots: string[] = []
@@ -38,5 +39,27 @@ describe('score cache', () => {
     expect(raw).not.toContain(key.traceA)
     await writeFile(cache.pathFor(key), '{broken')
     await expect(cache.get(key)).resolves.toBeUndefined()
+  })
+})
+
+describe('progress cache', () => {
+  const progressKey: ProgressCacheKey = {
+    promptVersion: 'progress-v1', backend: 'deepseek', model: 'model', problem: 'private problem',
+    steps: ['private step'], checkpoints: [1], repeat: 0,
+  }
+
+  it('invalidates progress identity and stores no raw trajectory', async () => {
+    expect(progressCacheDigest({ ...progressKey, model: 'other' })).not.toBe(progressCacheDigest(progressKey))
+    expect(progressCacheDigest({ ...progressKey, checkpoints: [2] })).not.toBe(progressCacheDigest(progressKey))
+    const root = await mkdtemp(join(tmpdir(), 'dsh-progress-cache-'))
+    roots.push(root)
+    const cache = new ProgressCache(root)
+    await cache.set(progressKey, { scores: [0.5], usage: zeroUsage })
+    expect(await cache.get(progressKey)).toEqual({ scores: [0.5], usage: zeroUsage })
+    const raw = await readFile(cache.pathFor(progressKey), 'utf8')
+    expect(raw).not.toContain(progressKey.problem)
+    expect(raw).not.toContain(progressKey.steps[0] as string)
+    await writeFile(cache.pathFor(progressKey), '{broken')
+    await expect(cache.get(progressKey)).resolves.toBeUndefined()
   })
 })

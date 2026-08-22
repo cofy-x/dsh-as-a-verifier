@@ -7,7 +7,10 @@
 
 import type { VerifierBackend } from './backend/deepseek.ts'
 import { ScoreCache, type ScoreCacheKey } from './cache/score-cache.ts'
+import { ProgressCache, type ProgressCacheKey } from './cache/progress-cache.ts'
 import type { ResolvedConfig } from './config.ts'
+import { buildProgressPrompt, PROGRESS_PROMPT_VERSION } from './progress/prompt.ts'
+import { extractProgressScores } from './progress/score.ts'
 import { buildPairwisePrompt, PROMPT_VERSION } from './reward/prompt.ts'
 import { extractExpectedScore } from './reward/score.ts'
 import { bradleyTerry, pivotRoundPairs, ringCycle, selectPivots, type DirectedPair } from './tournament/ppt.ts'
@@ -17,9 +20,13 @@ import {
   type VerifierCompareResult,
   type VerifierCriterion,
   type VerifierCriterionScore,
+  type VerifierProgressTracker,
+  type VerifierProgressTrackerOptions,
   type VerifierSelectRequest,
   type VerifierSelectResult,
   type VerifierServiceApi,
+  type VerifierTrackRequest,
+  type VerifierTrackResult,
 } from './types.ts'
 import { UsageAccumulator } from './usage.ts'
 
@@ -93,13 +100,76 @@ export class VerifierService implements VerifierServiceApi {
   private readonly controllers = new Set<AbortController>()
   private readonly operations = new Set<Promise<unknown>>()
   private readonly semaphore: Semaphore
+  private readonly trackers = new Set<ProgressTracker>()
 
   constructor(
     private readonly config: ResolvedConfig,
     private readonly backend: VerifierBackend,
     private readonly cache: ScoreCache,
+    private readonly progressCache = new ProgressCache(config.dataDir, config.cacheEnabled),
   ) {
     this.semaphore = new Semaphore(config.maxConcurrency)
+  }
+
+  track(request: VerifierTrackRequest): Promise<VerifierTrackResult> {
+    return this.operation(request.signal, async (signal) => {
+      const problem = nonBlank(request.problem, 'problem')
+      if (request.steps.length === 0) throw new VerifierError('steps must not be empty', 'INVALID_ARGUMENT')
+      if (request.steps.length > this.config.maxProgressSteps) {
+        throw new VerifierError(`steps exceeds configured maximum ${this.config.maxProgressSteps}`, 'LIMIT_EXCEEDED')
+      }
+      const steps = request.steps.map((step, index) => {
+        const value = nonBlank(step, `steps[${index}]`)
+        if (value.length > this.config.maxProgressStepChars) {
+          throw new VerifierError(`steps[${index}] exceeds configured character maximum ${this.config.maxProgressStepChars}`, 'LIMIT_EXCEEDED')
+        }
+        return value
+      })
+      const totalChars = steps.reduce((sum, step) => sum + step.length, 0)
+      if (totalChars > this.config.maxProgressTrajectoryChars) {
+        throw new VerifierError(`trajectory exceeds configured character maximum ${this.config.maxProgressTrajectoryChars}`, 'LIMIT_EXCEEDED')
+      }
+      const checkpoints = request.checkpointSteps === undefined
+        ? (steps.length > 2 ? Array.from({ length: steps.length - 2 }, (_, index) => index + 2) : steps.map((_, index) => index + 1))
+        : [...request.checkpointSteps]
+      if (checkpoints.length === 0) throw new VerifierError('checkpointSteps must not be empty', 'INVALID_ARGUMENT')
+      if (checkpoints.length > this.config.maxProgressCheckpoints) {
+        throw new VerifierError(`checkpointSteps exceeds configured maximum ${this.config.maxProgressCheckpoints}`, 'LIMIT_EXCEEDED')
+      }
+      for (let index = 0; index < checkpoints.length; index += 1) {
+        const checkpoint = checkpoints[index] as number
+        if (!Number.isSafeInteger(checkpoint) || checkpoint < 1 || checkpoint > steps.length) {
+          throw new VerifierError(`checkpointSteps[${index}] must be within 1..${steps.length}`, 'INVALID_ARGUMENT')
+        }
+        if (index > 0 && checkpoint <= (checkpoints[index - 1] as number)) {
+          throw new VerifierError('checkpointSteps must be strictly increasing and unique', 'INVALID_ARGUMENT')
+        }
+      }
+      const repeats = bounded(request.nEvaluations, this.config.nEvaluations, this.config.maxEvaluations, 'nEvaluations')
+      const usage = new UsageAccumulator()
+      const perEvaluationScores = await settleStrict(Array.from({ length: repeats }, (_, repeat) =>
+        this.scoreProgress(problem, steps, checkpoints, repeat, usage, signal)))
+      const scores = checkpoints.map((_, index) =>
+        perEvaluationScores.reduce((sum, evaluation) => sum + (evaluation[index] as number), 0) / repeats)
+      const snapshot = usage.snapshot()
+      return {
+        steps: checkpoints,
+        scores,
+        perEvaluationScores,
+        final: scores.at(-1) as number,
+        verifierCalls: snapshot.calls,
+        usage: snapshot,
+      }
+    })
+  }
+
+  createProgressTracker(options: VerifierProgressTrackerOptions): VerifierProgressTracker {
+    if (!this.accepting) throw new VerifierError('verifier service is disposed', 'DISPOSED')
+    const problem = nonBlank(options.problem, 'problem')
+    const repeats = bounded(options.nEvaluations, this.config.nEvaluations, this.config.maxEvaluations, 'nEvaluations')
+    const tracker = new ProgressTracker(this, problem, repeats, () => { this.trackers.delete(tracker) })
+    this.trackers.add(tracker)
+    return tracker
   }
 
   compare(request: VerifierCompareRequest): Promise<VerifierCompareResult> {
@@ -196,8 +266,40 @@ export class VerifierService implements VerifierServiceApi {
   /** Stop admission, abort every live request, and wait for operation quiescence. */
   async dispose(): Promise<void> {
     this.accepting = false
+    await Promise.allSettled([...this.trackers].map(tracker => tracker.dispose()))
     for (const controller of this.controllers) controller.abort(new VerifierError('verifier plugin disposed', 'DISPOSED'))
     await Promise.allSettled([...this.operations])
+  }
+
+  private async scoreProgress(
+    problem: string,
+    steps: readonly string[],
+    checkpoints: readonly number[],
+    repeat: number,
+    usage: UsageAccumulator,
+    signal: AbortSignal,
+  ): Promise<number[]> {
+    const key: ProgressCacheKey = {
+      promptVersion: PROGRESS_PROMPT_VERSION,
+      backend: this.backend.id,
+      model: this.backend.model,
+      problem,
+      steps,
+      checkpoints,
+      repeat,
+    }
+    const cached = await this.progressCache.get(key)
+    if (cached !== undefined && cached.scores.length === checkpoints.length) return [...cached.scores]
+    return this.semaphore.run(async () => {
+      cancelled(signal)
+      const lateCache = await this.progressCache.get(key)
+      if (lateCache !== undefined && lateCache.scores.length === checkpoints.length) return [...lateCache.scores]
+      const response = await this.backend.score({ prompt: buildProgressPrompt(problem, steps, checkpoints), signal })
+      const scores = extractProgressScores(response.distribution, checkpoints.length)
+      usage.add(response.usage)
+      await this.progressCache.set(key, { scores, usage: response.usage })
+      return scores
+    })
   }
 
   private operation<T>(callerSignal: AbortSignal | undefined, body: (signal: AbortSignal) => Promise<T>): Promise<T> {
@@ -289,5 +391,79 @@ export class VerifierService implements VerifierServiceApi {
       await this.cache.set(key, { scoreA, scoreB, usage: response.usage })
       return { scoreA, scoreB }
     })
+  }
+}
+
+class ProgressTracker implements VerifierProgressTracker {
+  private readonly steps: string[] = []
+  private readonly scores: number[] = []
+  private readonly perEvaluationScores: number[][] = []
+  private readonly usage = new UsageAccumulator()
+  private active: AbortController | undefined
+  private activeTask: Promise<VerifierTrackResult> | undefined
+  private disposed = false
+
+  constructor(
+    private readonly service: VerifierService,
+    private readonly problem: string,
+    private readonly nEvaluations: number,
+    private readonly onDispose: () => void,
+  ) {}
+
+  async update(step: string, options: { readonly signal?: AbortSignal } = {}): Promise<number> {
+    if (this.disposed) throw new VerifierError('progress tracker is disposed', 'DISPOSED')
+    if (this.active !== undefined) throw new VerifierError('progress tracker update is already in progress', 'OPERATION_IN_PROGRESS')
+    const controller = new AbortController()
+    const onAbort = (): void => { controller.abort(options.signal?.reason) }
+    if (options.signal?.aborted === true) onAbort()
+    else options.signal?.addEventListener('abort', onAbort, { once: true })
+    this.active = controller
+    try {
+      const candidateSteps = [...this.steps, step]
+      const task = this.service.track({
+        problem: this.problem,
+        steps: candidateSteps,
+        checkpointSteps: [candidateSteps.length],
+        nEvaluations: this.nEvaluations,
+        signal: controller.signal,
+      })
+      this.activeTask = task
+      const result = await task
+      this.steps.push(step)
+      this.scores.push(result.final)
+      if (this.perEvaluationScores.length === 0) {
+        for (let index = 0; index < result.perEvaluationScores.length; index += 1) this.perEvaluationScores.push([])
+      }
+      result.perEvaluationScores.forEach((evaluation, index) => {
+        ;(this.perEvaluationScores[index] as number[]).push(evaluation[0] as number)
+      })
+      this.usage.add(result.usage)
+      return result.final
+    } finally {
+      options.signal?.removeEventListener('abort', onAbort)
+      this.active = undefined
+      this.activeTask = undefined
+    }
+  }
+
+  result(): VerifierTrackResult {
+    if (this.steps.length === 0) throw new VerifierError('progress tracker has no scored steps', 'INVALID_STATE')
+    const usage = this.usage.snapshot()
+    return {
+      steps: this.steps.map((_, index) => index + 1),
+      scores: [...this.scores],
+      perEvaluationScores: this.perEvaluationScores.map(row => [...row]),
+      final: this.scores.at(-1) as number,
+      verifierCalls: usage.calls,
+      usage,
+    }
+  }
+
+  async dispose(): Promise<void> {
+    if (this.disposed) return
+    this.disposed = true
+    this.active?.abort(new VerifierError('progress tracker disposed', 'DISPOSED'))
+    if (this.activeTask !== undefined) await Promise.allSettled([this.activeTask])
+    this.onDispose()
   }
 }

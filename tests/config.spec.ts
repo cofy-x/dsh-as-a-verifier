@@ -8,6 +8,8 @@ describe('configuration', () => {
       model: 'deepseek-v4-flash', baseURL: 'https://example.test', apiKeyEnv: 'DEEPSEEK_API_KEY',
       reasoningEffort: 'high', maxTokens: 32_768, nEvaluations: 2, maxEvaluations: 8,
       pivots: 2, maxPivots: 8, maxCandidates: 16, maxCriteria: 8,
+      maxProgressSteps: 256, maxProgressCheckpoints: 64,
+      maxProgressStepChars: 32_768, maxProgressTrajectoryChars: 262_144,
       maxConcurrency: 8, requestTimeoutMs: 120_000, retryAttempts: 3, cacheEnabled: true,
     })
     expect(resolved.dataDir.endsWith('as-a-verifier')).toBe(true)

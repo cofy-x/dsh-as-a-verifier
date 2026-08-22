@@ -27,6 +27,10 @@ export function resolvedConfig(overrides: Partial<ResolvedConfig> = {}): Resolve
     maxPivots: 8,
     maxCandidates: 16,
     maxCriteria: 8,
+    maxProgressSteps: 256,
+    maxProgressCheckpoints: 64,
+    maxProgressStepChars: 32_768,
+    maxProgressTrajectoryChars: 262_144,
     maxConcurrency: 8,
     requestTimeoutMs: 120_000,
     retryAttempts: 3,
@@ -48,6 +52,17 @@ export function scoreDistribution(letterA: string, letterB: string): TokenDistri
   }
 }
 
+export function progressDistribution(letters: readonly string[]): TokenDistribution {
+  const tokens: string[] = ['analysis\n']
+  for (const [index, letter] of letters.entries()) tokens.push(`<c${index + 1}>`, `>${letter}`, `</c${index + 1}>\n`)
+  return {
+    tokens,
+    positionLogprobs: tokens.map(token => token.startsWith('>')
+      ? [{ token, logprob: 0 }]
+      : [{ token, logprob: 0 }]),
+  }
+}
+
 export class PromptBackend implements VerifierBackend {
   readonly id = 'fake-v1'
   readonly model = 'fake-model'
@@ -56,6 +71,11 @@ export class PromptBackend implements VerifierBackend {
   async score(request: { prompt: string, signal?: AbortSignal }) {
     this.calls += 1
     request.signal?.throwIfAborted()
+    if (request.prompt.includes('The checkpoints are:')) {
+      const count = [...request.prompt.matchAll(/Checkpoint \d+ =/gu)].length
+      const letters = Array.from({ length: count }, (_, index) => index === count - 1 ? 'T' : 'K')
+      return { distribution: progressDistribution(letters), usage: zeroUsage }
+    }
     const markerA = '**Trajectory ' + 'A:**\n'
     const markerB = '**Trajectory ' + 'B:**\n'
     const markerScale = '**Rating Scale:**'

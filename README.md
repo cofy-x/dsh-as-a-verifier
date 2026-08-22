@@ -2,9 +2,9 @@
 
 English | [中文](README.zh.md)
 
-`dsh-as-a-verifier` is a standalone DeepSeek Harness function plugin that scores two agent trajectories with fine-grained token-logprob rewards and selects the best of N candidates with a Probabilistic Pivot Tournament (PPT). It provides both `ctx.verifier` and the model-facing `verifier_select` tool.
+`dsh-as-a-verifier` is a standalone DeepSeek Harness function plugin that compares trajectories, selects the best of N with a Probabilistic Pivot Tournament (PPT), and scores progress along one trajectory. It provides `ctx.verifier` plus the model-facing `verifier_select` and `verifier_track` tools.
 
-The MVP is a native TypeScript implementation. It derives the A–T logprob reward, prompt structure, A/B slot swapping, Bradley–Terry aggregation, and PPT policy from `llm-as-a-verifier` at commit `115de305f23ed89bc42e86e010853c40059f3f7d`. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The native TypeScript implementation derives pairwise reward, PPT, and offline/online A–T progress tracking from `llm-as-a-verifier` at commit `115de305f23ed89bc42e86e010853c40059f3f7d`. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Install
 
@@ -60,11 +60,25 @@ const selection = await ctx.verifier.select({
   pivots: 2,
   seed: 0,
 })
+
+const progress = await ctx.verifier.track({
+  problem: 'Fix the failing parser tests.',
+  steps: ['Inspected the failure.', 'Edited the parser.', 'Ran the tests successfully.'],
+  checkpointSteps: [1, 3],
+})
+
+const tracker = ctx.verifier.createProgressTracker({ problem: 'Fix the failing parser tests.' })
+await tracker.update('Inspected the failure and reproduced it.')
+await tracker.update('Implemented the fix and ran the focused tests.')
+const onlineProgress = tracker.result()
+await tracker.dispose()
 ```
 
 `compare()` returns rewards in `[0, 1]`, per-criterion rewards, actual verifier calls, and token usage. `select()` returns `selectedIndex`, `best`, a complete index ranking, scores in candidate-index order, comparison and call counts, the validated criteria, and token usage. A one-candidate selection returns immediately without credentials or network traffic.
 
-The `verifier_select` tool accepts the same problem, string candidates, and criteria. Its optional arguments are named `n_evaluations`, `pivots`, and `seed`; deployment ceilings always win over tool input. It uses a generic execution card and declares no file locations.
+`track()` returns strict checkpoint scores, raw per-evaluation curves, final score, calls, and usage. With more than two steps its default checkpoints are `2..T-1`; shorter trajectories score every step. Checkpoints are 1-based, unique, and strictly increasing. `createProgressTracker()` scores only the prefix available at each update, so later steps cannot influence earlier scores.
+
+The `verifier_select` tool accepts the same problem, string candidates, and criteria. Its optional arguments are named `n_evaluations`, `pivots`, and `seed`; deployment ceilings always win over tool input. `verifier_track` accepts `problem`, `steps`, optional `checkpoint_steps`, and `n_evaluations`. Both use generic cards and declare no file locations.
 
 ## Configuration
 
@@ -79,6 +93,10 @@ The `verifier_select` tool accepts the same problem, string candidates, and crit
 | `pivots` / `maxPivots` | `2` / `8` | Default and deployment ceiling for PPT pivots |
 | `maxCandidates` | `16` | Candidate ceiling |
 | `maxCriteria` | `8` | Criterion ceiling |
+| `maxProgressSteps` | `256` | Progress trajectory step ceiling |
+| `maxProgressCheckpoints` | `64` | Checkpoints scored in one request |
+| `maxProgressStepChars` | `32768` | Character ceiling for one step |
+| `maxProgressTrajectoryChars` | `262144` | Total progress trajectory character ceiling |
 | `maxConcurrency` | `8` | Maximum simultaneous HTTP calls |
 | `requestTimeoutMs` | `120000` | Timeout for each HTTP attempt |
 | `retryAttempts` | `3` | Total bounded attempts for retryable failures |
@@ -98,15 +116,15 @@ comparisons = N + k(N - k) + k(k - 1) / 2
 verifier calls = comparisons × criteria × nEvaluations
 ```
 
-`compare()` uses `criteria × nEvaluations` calls. Cache hits reduce actual calls and current-operation usage to zero for those scores. Provider billing depends on the returned cached/uncached input, output, and reasoning token counts.
+`compare()` uses `criteria × nEvaluations` calls. Offline progress uses exactly `nEvaluations` calls regardless of checkpoint count; online progress uses `nEvaluations` calls per update. Cache hits reduce actual calls and current-operation usage to zero for those scores. Provider billing depends on the returned cached/uncached input, output, and reasoning token counts.
 
-Missing score-position logprobs, no valid A–T alternatives, malformed JSON, invalid usage, and any partial scoring failure reject the whole operation. The plugin never fabricates a `0.5/0.5` tie. Only transport failures, HTTP 429, and HTTP 5xx are retried; authentication, protocol, and content failures are not. A valid `Retry-After` is honored within a bounded delay. Fiber disposal stops admission, aborts active requests, and waits for them to settle.
+Missing score-position logprobs, no valid A–T alternatives, malformed JSON, invalid usage, and any partial scoring failure reject the whole operation. The plugin never fabricates a `0.5/0.5` tie or `0.5` progress score, and progress never falls back to sampled response text. Only transport failures, HTTP 429, and HTTP 5xx are retried; authentication, protocol, and content failures are not. A valid `Retry-After` is honored within a bounded delay. Fiber disposal stops admission, aborts active requests, and waits for them to settle.
 
 ## Cache and data disclosure
 
-Cache identity covers the prompt/schema version, backend, model, problem, ordered candidates, complete criterion, repetition, and slot order, then hashes that identity with SHA-256. Versioned entries are atomically replaced with owner-only permissions. Corrupt or incompatible entries are misses.
+Pairwise and progress caches use separate versioned namespaces. Progress identity covers backend, model, prompt version, problem, complete steps, checkpoints, and repeat. Pairwise identity covers prompt/schema version, backend, model, problem, ordered candidates, complete criterion, repetition, and slot order. Every identity is hashed with SHA-256. Versioned entries are atomically replaced with owner-only permissions; corrupt or incompatible entries are misses.
 
-Cache files contain only numeric rewards and token usage. They do not store the raw task, trajectories, prompts, model responses, API keys, or reasoning traces. API calls necessarily send the problem, the two compared candidates, and one criterion to the configured DeepSeek endpoint. Credentials are resolved immediately before every HTTP request and never enter configuration, logs, cache entries, or test snapshots.
+Cache files contain only numeric rewards and token usage. They do not store the raw task, trajectories, prompts, model responses, API keys, or reasoning traces. API calls necessarily send the problem and relevant trajectory content to the configured DeepSeek endpoint: either two candidates and one criterion, or the progress steps and checkpoints. Credentials are resolved immediately before every HTTP request and never enter configuration, logs, cache entries, or test snapshots.
 
 ## Development
 
@@ -121,9 +139,9 @@ pnpm run prepare
 
 The optional real-provider e2e is intentionally outside keyless CI and should self-skip when `DEEPSEEK_API_KEY` is absent.
 
-## MVP boundaries
+## Boundaries
 
-The MVP does not include online progress tracking, `verified_ralph`, multimodal inputs, Vertex/OpenAI-compatible backends, a Web panel, coding worktrees, price conversion, or a transparent model proxy. `verified_ralph` is the planned first consumer for the next phase.
+This package does not include `verified_ralph`, multimodal inputs, Vertex/OpenAI-compatible backends, a Web panel, coding worktrees, price conversion, or a transparent model proxy. `dsh-verified-ralph` is a separate consumer plugin.
 
 ## License
 
