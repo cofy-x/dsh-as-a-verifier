@@ -1,0 +1,31 @@
+{
+  "selectedIndex": 0,
+  "best": "only candidate",
+  "ranking": [
+    0
+  ],
+  "scores": [
+    {
+      "index": 0,
+      "score": 1
+    }
+  ],
+  "comparisonCount": 0,
+  "verifierCalls": 0,
+  "criteria": [
+    {
+      "id": "correct",
+      "name": "Correctness",
+      "description": "Judge correctness."
+    }
+  ],
+  "usage": {
+    "calls": 0,
+    "inputTokens": 0,
+    "cachedInputTokens": 0,
+    "uncachedInputTokens": 0,
+    "outputTokens": 0,
+    "reasoningTokens": 0,
+    "cacheHitRate": 0
+  }
+}
