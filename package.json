@@ -1,7 +1,7 @@
 {
   "name": "dsh-as-a-verifier",
   "description": "Fine-grained logprob verification and probabilistic pivot selection for DeepSeek Harness",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.7.0",
@@ -16,6 +16,8 @@
     "build": "tsc -b && tsdown --config tsdown.config.mjs",
     "test": "vitest run",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "check:peers": "node scripts/check-peer-compat.mjs",
+    "check:dsh-contract": "node scripts/check-dsh-contract.mjs",
     "smoke:git": "node scripts/git-install-smoke.mjs",
     "verify:release": "node scripts/verify-release.mjs",
     "typecheck": "tsc -b --pretty false && tsc -p tsconfig.vitest.json --pretty false",
@@ -49,12 +51,12 @@
   "license": "MIT",
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.1-rc.1 <5.0.0",
-    "@deepseek-ai/dsh-atomic-write": ">=0.1.1-rc.2 <0.2.0",
-    "@deepseek-ai/dsh-credentials": ">=0.1.1-rc.2 <0.2.0",
-    "@deepseek-ai/dsh-home-paths": ">=0.1.1-rc.2 <0.2.0",
-    "@deepseek-ai/dsh-launch-environment": ">=0.1.1-rc.2 <0.2.0",
-    "@deepseek-ai/dsh-session": ">=0.1.1-rc.2 <0.2.0",
-    "@deepseek-ai/dsh-tools": ">=0.1.1-rc.2 <0.2.0",
+    "@deepseek-ai/dsh-atomic-write": ">=0.1.1-rc.2 <0.2.0 || >=0.1.2-alpha.1 <0.1.2",
+    "@deepseek-ai/dsh-credentials": ">=0.1.1-rc.2 <0.2.0 || >=0.1.2-alpha.1 <0.1.2",
+    "@deepseek-ai/dsh-home-paths": ">=0.1.1-rc.2 <0.2.0 || >=0.1.2-alpha.1 <0.1.2",
+    "@deepseek-ai/dsh-launch-environment": ">=0.1.1-rc.2 <0.2.0 || >=0.1.2-alpha.1 <0.1.2",
+    "@deepseek-ai/dsh-session": ">=0.1.1-rc.2 <0.2.0 || >=0.1.2-alpha.1 <0.1.2",
+    "@deepseek-ai/dsh-tools": ">=0.1.1-rc.2 <0.2.0 || >=0.1.2-alpha.1 <0.1.2",
     "@deepseek-ai/schemastery": ">=3.18.1-rc.1 <4.0.0"
   },
   "peerDependenciesMeta": {
@@ -106,6 +108,7 @@
     "@deepseek-ai/dsh-user-approval": "0.1.1-rc.2",
     "@deepseek-ai/schemastery": "3.18.1",
     "@types/node": "22.20.0",
+    "semver": "7.8.5",
     "tsdown": "0.22.2",
     "typescript": "6.0.3",
     "vitest": "4.1.8"

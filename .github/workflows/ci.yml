@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        node: [22, 24]
+        node: ['24', '22.19.0']
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -30,6 +30,7 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm run check:peers
       - run: pnpm run verify:self-contained
       - run: pnpm run typecheck
       - run: pnpm test
@@ -46,20 +47,43 @@ jobs:
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10, Node 24 runtime
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0, Node 24 runtime
         with:
-          node-version: 22
+          node-version: 24
       - name: Install exact Git revision
         env:
           INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node scripts/git-install-smoke.mjs --ref "$INSTALL_REF"
 
+  dsh-contract:
+    name: dsh-contract (dsh-v0.1.2-alpha.1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24 runtime
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24 runtime
+        with:
+          repository: deepseek-ai/deepseek-harness
+          ref: cd5ef8148158c3a752a658978873241fdf8e2bbc
+          path: .dsh-compat
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10, Node 24 runtime
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0, Node 24 runtime
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Verify audited DSH source contract
+        env:
+          DSH_SOURCE_DIR: .dsh-compat
+          DSH_SOURCE_COMMIT: cd5ef8148158c3a752a658978873241fdf8e2bbc
+        run: pnpm run check:dsh-contract
+
   required:
     name: required
     if: ${{ always() }}
-    needs: [quality, git-install-smoke]
+    needs: [quality, git-install-smoke, dsh-contract]
     runs-on: ubuntu-latest
     steps:
       - name: Require every gate
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
           SMOKE_RESULT: ${{ needs.git-install-smoke.result }}
-        run: test "$QUALITY_RESULT" = success && test "$SMOKE_RESULT" = success
+          CONTRACT_RESULT: ${{ needs.dsh-contract.result }}
+        run: test "$QUALITY_RESULT" = success && test "$SMOKE_RESULT" = success && test "$CONTRACT_RESULT" = success
