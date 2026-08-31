@@ -31,7 +31,7 @@ allowBuilds:
 需要稳定复现的生产部署应固定不可移动的 release tag（或审核过的 commit）：
 
 ```sh
-dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.4
+dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.5
 ```
 
 Release tag 只从完成全部验证并合入 `main` 的 commit 创建，且绝不移动。向后兼容的修复与 capability 增量提升 patch 版本；新增公共 API 提升 minor 版本；不兼容的 `ctx.verifier` 合同必须提升 protocol version 与 major 版本。
@@ -145,7 +145,7 @@ pnpm run build
 pnpm run prepare
 ```
 
-每个 PR 与 `main` 更新都会在 Ubuntu、Windows 上以 Node 24 和精确最低版本 Node 22.19.0 运行无密钥测试，再以 Node 24 执行基于精确 commit 的 Git-install smoke。源码合同门禁固定到已审查的 DSH `dsh-v0.1.2-alpha.1`（`cd5ef8148158c3a752a658978873241fdf8e2bbc`），并验证 provider 使用的导入 seam。稳定的 `ci / required` 是受保护分支的合并门禁。Actions 只有仓库只读权限，也不会获得 DeepSeek 凭据。
+每个 PR 与 `main` 更新都会在 Ubuntu、Windows 上以 Node 24 和精确最低版本 Node 22.19.0 运行无密钥测试，再以 Node 24 执行基于精确 commit 的 Git-install smoke 和真实 Web/Headless Profile 安装 smoke。Profile smoke 使用已发布的 DSH CLI，检查 peer 解析和唯一 provider bundle row，并通过两个 surface 的 help 路径完成启动与无残留退出，全程不读取凭据。源码合同门禁固定到已审查的 DSH `dsh-v0.1.2-alpha.2`（`0a53fb55bea101816fa226bb964ae2bed71c343b`），并验证 provider 使用的导入 seam。稳定的 `ci / required` 是受保护分支的合并门禁。Actions 只有仓库只读权限，也不会获得 DeepSeek 凭据。
 
 Release 继续采用人工确认的 Git-only 流程：先针对当前 `main` 的精确 commit 和 package version 运行只读 `release-check`，再创建 annotated tag。Tag 触发的二次检查会验证 annotation、版本、`main` 历史、完整无密钥门禁以及从 tag 安装；通过后为不可变 tag 发布非 draft、非 prerelease 的 GitHub Release。Workflow 不创建或移动 tag，也不发布 npm。真实 provider e2e 保持在 CI 外；backend、prompt 或 score decoder 行为变化时必须进入 release 证据，其他变更在缺少 `DEEPSEEK_API_KEY` 时自行跳过。
 

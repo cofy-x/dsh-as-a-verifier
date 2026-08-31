@@ -54,5 +54,10 @@ jobs:
         env:
           INSTALL_REF: ${{ inputs.ref || github.ref_name }}
         run: node scripts/git-install-smoke.mjs --ref "$INSTALL_REF"
+      - name: Verify Web and Headless profile installation
+        if: ${{ inputs.ref != '' }}
+        env:
+          INSTALL_REF: ${{ inputs.ref }}
+        run: node scripts/profile-install-smoke.mjs --ref "$INSTALL_REF"
       - name: Verify tracked files remain clean
         run: test -z "$(git status --porcelain)"
