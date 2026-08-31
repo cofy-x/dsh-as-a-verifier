@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import semver from 'semver'
 
-const CURRENT_DSH_RELEASE = '0.1.2-alpha.1'
+const CURRENT_DSH_RELEASE = '0.1.2-alpha.2'
 const PUBLISHED_DSH_BASELINE = '0.1.1-rc.2'
 const DSH_PEERS = [
   '@deepseek-ai/dsh-atomic-write',
@@ -25,4 +25,3 @@ for (const name of DSH_PEERS) {
 assert.equal(semver.satisfies('22.19.0', pkg.engines.node), true, 'Node 22.19.0 must remain the minimum compatibility target')
 assert.equal(semver.satisfies('24.0.0', pkg.engines.node), true, 'Node 24 must be supported')
 assert.equal(semver.satisfies('22.18.0', pkg.engines.node), false, 'Node releases below 22.19.0 must be rejected')
-
