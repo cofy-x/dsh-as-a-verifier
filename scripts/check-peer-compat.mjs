@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import semver from 'semver'
 
-const CURRENT_DSH_RELEASE = '0.1.2-alpha.2'
-const PUBLISHED_DSH_BASELINE = '0.1.1-rc.2'
+const CURRENT_DSH_RELEASE = '0.1.3-alpha.1'
+const PUBLISHED_DSH_BASELINE = '0.1.2-rc.1'
 const DSH_PEERS = [
   '@deepseek-ai/dsh-atomic-write',
   '@deepseek-ai/dsh-credentials',
