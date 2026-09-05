@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
-const DSH_VERSION = '0.1.2-alpha.2'
+const DSH_VERSION = '0.1.2-rc.1'
 const PACKAGE_NAME = 'dsh-as-a-verifier'
 const REPOSITORY = 'omdsh-dev/dsh-as-a-verifier'
 
@@ -51,7 +51,7 @@ try {
     'allowBuilds:',
     `  '@deepseek-ai/dsh-subprocess-local@${DSH_VERSION}': true`,
     "  '@google/genai@1.52.0': true",
-    "  'koffi@3.1.6': true",
+    "  'koffi@3.2.0': true",
     "  'node-pty@1.2.0-beta.15': true",
     "  'protobufjs@7.6.6': true",
     '',

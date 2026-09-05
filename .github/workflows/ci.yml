@@ -54,7 +54,7 @@ jobs:
         run: node scripts/git-install-smoke.mjs --ref "$INSTALL_REF"
 
   dsh-contract:
-    name: dsh-contract (dsh-v0.1.2-alpha.2)
+    name: dsh-contract (dsh-v0.1.3-alpha.1)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24 runtime
         with:
           repository: deepseek-ai/deepseek-harness
-          ref: 0a53fb55bea101816fa226bb964ae2bed71c343b
+          ref: d347e703908d0406b7a7ef80e3a0e594d86b2215
           path: .dsh-compat
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10, Node 24 runtime
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0, Node 24 runtime
@@ -72,7 +72,7 @@ jobs:
       - name: Verify audited DSH source contract
         env:
           DSH_SOURCE_DIR: .dsh-compat
-          DSH_SOURCE_COMMIT: 0a53fb55bea101816fa226bb964ae2bed71c343b
+          DSH_SOURCE_COMMIT: d347e703908d0406b7a7ef80e3a0e594d86b2215
         run: pnpm run check:dsh-contract
 
   profile-install-smoke:

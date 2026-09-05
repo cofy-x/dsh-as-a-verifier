@@ -31,7 +31,7 @@ allowBuilds:
 For a reproducible stable deployment, pin the immutable release tag (or an audited commit):
 
 ```sh
-dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.5
+dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.6
 ```
 
 Release tags are created only from a validated merge on `main` and are never moved. Backward-compatible fixes and capability additions increment the patch version; public API additions increment the minor version; an incompatible `ctx.verifier` contract requires a new protocol version and a major release.
@@ -145,7 +145,7 @@ pnpm run build
 pnpm run prepare
 ```
 
-Every pull request and `main` update runs the keyless suite on Ubuntu and Windows with Node 24 and the exact minimum Node 22.19.0, followed by exact-commit Git-install and real Web/Headless profile-install smokes on Node 24. The profile smoke uses the published DSH CLI, checks peer resolution and the single provider bundle row, boots each surface through its help path, and must exit cleanly without credentials. A source-contract gate pins the audited DSH `dsh-v0.1.2-alpha.2` release (`0a53fb55bea101816fa226bb964ae2bed71c343b`) and verifies the imported provider seams. The stable `ci / required` result is the protected-branch merge gate. Actions have read-only repository permission and receive no DeepSeek credential.
+Every pull request and `main` update runs the keyless suite on Ubuntu and Windows with Node 24 and the exact minimum Node 22.19.0, followed by exact-commit Git-install and real Web/Headless profile-install smokes on Node 24. The profile smoke uses the latest npm-published DSH CLI (`0.1.2-rc.1`), checks peer resolution and the single provider bundle row, boots each surface through its help path, and must exit cleanly without credentials. A separate source-contract gate pins the audited DSH `dsh-v0.1.3-alpha.1` release (`d347e703908d0406b7a7ef80e3a0e594d86b2215`) and verifies the imported provider seams. These targets are deliberately separate because the audited alpha release is not yet available from npm. The stable `ci / required` result is the protected-branch merge gate. Actions have read-only repository permission and receive no DeepSeek credential.
 
 Releases remain deliberate and Git-only. Run the read-only `release-check` workflow against the exact current `main` commit and package version, then create an annotated tag. A tag-triggered release check verifies the annotation, version, `main` ancestry, complete keyless suite, and installation from the tag. After it is green, publish a non-draft, non-prerelease GitHub Release for the immutable tag. The workflow never creates or moves tags and never publishes npm artifacts. Real-provider e2e remains outside CI; it is required in the release evidence when backend, prompt, or score-decoder behavior changes and otherwise self-skips without `DEEPSEEK_API_KEY`.
 
