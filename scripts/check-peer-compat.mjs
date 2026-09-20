@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import semver from 'semver'
+import { dshVersion as CURRENT_DSH_RELEASE, previousDshVersion as PREVIOUS_DSH_RELEASE } from './project.mjs'
 
-const CURRENT_DSH_RELEASE = '0.1.3-alpha.1'
-const PUBLISHED_DSH_BASELINE = '0.1.2-rc.1'
 const DSH_PEERS = [
   '@deepseek-ai/dsh-atomic-write',
   '@deepseek-ai/dsh-credentials',
@@ -17,8 +16,8 @@ const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url
 for (const name of DSH_PEERS) {
   const range = pkg.peerDependencies?.[name]
   assert.equal(typeof range, 'string', `missing peer dependency ${name}`)
-  assert.equal(semver.satisfies(PUBLISHED_DSH_BASELINE, range), true, `${name} must accept the published test baseline`)
   assert.equal(semver.satisfies(CURRENT_DSH_RELEASE, range), true, `${name} must accept the current DSH release`)
+  assert.equal(semver.satisfies(PREVIOUS_DSH_RELEASE, range), false, `${name} must reject releases older than the audited baseline`)
   assert.equal(semver.satisfies('0.2.0', range), false, `${name} must not silently accept the next minor contract`)
 }
 

@@ -88,6 +88,7 @@ for (const requiredPath of [
   '.github/workflows/ci.yml',
   '.github/workflows/release-check.yml',
   'scripts/git-install-smoke.mjs',
+  'scripts/project.mjs',
   'scripts/verify-release.mjs',
 ]) {
   if (!existsSync(join(root, requiredPath))) failures.push(`missing repository-layout contract ${requiredPath}`)

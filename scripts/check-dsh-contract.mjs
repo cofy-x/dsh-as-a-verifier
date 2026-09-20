@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { dshCommit as EXPECTED_COMMIT, dshVersion as EXPECTED_VERSION } from './project.mjs'
 
-const EXPECTED_COMMIT = 'd347e703908d0406b7a7ef80e3a0e594d86b2215'
-const EXPECTED_VERSION = '0.1.3-alpha.1'
 const source = process.env.DSH_SOURCE_DIR
 if (!source) throw new Error('DSH_SOURCE_DIR must point to the checked-out deepseek-harness release')
 
