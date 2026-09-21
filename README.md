@@ -30,10 +30,11 @@ allowBuilds:
 
 Use the exact key printed by pnpm. The content-addressed key authorizes only that resolved Git archive; a package-name-wide approval is intentionally not used.
 
-For a reproducible deployment, pin an immutable release tag (or an audited commit):
+For a reproducible deployment, choose an immutable tag from <https://github.com/cofy-x/dsh-as-a-verifier/releases> (or use an audited commit):
 
 ```sh
-dsh plugin --profile web add github:cofy-x/dsh-as-a-verifier#v0.2.6
+VERIFIER_TAG=vX.Y.Z
+dsh plugin --profile web add "github:cofy-x/dsh-as-a-verifier#$VERIFIER_TAG"
 ```
 
 After installation, `dsh --profile web --dump-config` or the corresponding Headless profile should show exactly one `dsh-as-a-verifier` row.

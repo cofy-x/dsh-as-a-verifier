@@ -30,10 +30,11 @@ allowBuilds:
 
 请使用 pnpm 输出的精确键。内容寻址键只授权该次解析出的 Git 归档；这里有意不使用包名级的宽泛授权。
 
-需要稳定复现的部署应固定不可移动的 release tag（或审核过的 commit）：
+需要稳定复现的部署应从 <https://github.com/cofy-x/dsh-as-a-verifier/releases> 选择不可移动的 tag（或使用审核过的 commit）：
 
 ```sh
-dsh plugin --profile web add github:cofy-x/dsh-as-a-verifier#v0.2.6
+VERIFIER_TAG=vX.Y.Z
+dsh plugin --profile web add "github:cofy-x/dsh-as-a-verifier#$VERIFIER_TAG"
 ```
 
 安装后，`dsh --profile web --dump-config`（或对应的 Headless profile）应只出现一行 `dsh-as-a-verifier`。
