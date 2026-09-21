@@ -8,33 +8,33 @@ TypeScript 原生实现的 pairwise reward、PPT 与离线/在线 A–T progress
 
 ## 安装
 
-仓库支持 Git URL 安装，`package.json` 有意保持 `private: true`；MVP 不支持 npm 发布。
+仓库支持 Git URL 安装，`package.json` 有意保持 `private: true`；不发布到 npm。
 
 ```sh
-dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier
-dsh plugin --profile headless add github:omdsh-dev/dsh-as-a-verifier
+dsh plugin --profile web add github:cofy-x/dsh-as-a-verifier
+dsh plugin --profile headless add github:cofy-x/dsh-as-a-verifier
 ```
 
-不带 ref 的 GitHub spec 会在 pnpm 安装或更新时解析仓库默认分支；选中的 commit 随后由 Profile lockfile 固定，重启 DSH 不会静默追踪新提交。升级需要显式执行并重启 Profile：
+默认分支安装只在安装时解析一次，随后由 Profile lockfile 固定。升级需要显式执行，再重启 Profile：
 
 ```sh
 dsh plugin --profile web update dsh-as-a-verifier
 ```
 
-Git 安装会执行本包的自包含 `prepare` 构建。pnpm 10 及以上需要在目标 profile 的 `pnpm-workspace.yaml` 中做一次显式授权；复制首次安装报错给出的包键，然后重试：
+Git 安装会执行本包的自包含 `prepare` 构建。将 pnpm 报告的精确键加入 `$DSH_HOME/profiles/<profile>/pnpm-workspace.yaml`，然后重试：
 
 ```yaml
 allowBuilds:
-  dsh-as-a-verifier: true
+  dsh-as-a-verifier@https://codeload.github.com/cofy-x/dsh-as-a-verifier/tar.gz/<resolved-commit>: true
 ```
 
-需要稳定复现的生产部署应固定不可移动的 release tag（或审核过的 commit）：
+请使用 pnpm 输出的精确键。内容寻址键只授权该次解析出的 Git 归档；这里有意不使用包名级的宽泛授权。
+
+需要稳定复现的部署应固定不可移动的 release tag（或审核过的 commit）：
 
 ```sh
-dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.6
+dsh plugin --profile web add github:cofy-x/dsh-as-a-verifier#v0.2.6
 ```
-
-Release tag 只从完成全部验证并合入 `main` 的 commit 创建，且绝不移动。向后兼容的修复与 capability 增量提升 patch 版本；新增公共 API 提升 minor 版本；不兼容的 `ctx.verifier` 合同必须提升 protocol version 与 major 版本。
 
 安装后，`dsh --profile web --dump-config`（或对应的 Headless profile）应只出现一行 `dsh-as-a-verifier`。
 
@@ -137,6 +137,7 @@ Pairwise 与 progress 使用独立版本化缓存。Progress identity 包含 bac
 ## 开发
 
 ```sh
+corepack enable pnpm
 pnpm install
 pnpm run verify:self-contained
 pnpm run typecheck
@@ -145,9 +146,9 @@ pnpm run build
 pnpm run prepare
 ```
 
-每个 PR 与 `main` 更新都会在 Ubuntu、Windows 上以 Node 24 和精确最低版本 Node 22.19.0 运行无密钥测试，再以 Node 24 执行基于精确 commit 的 Git-install smoke 和真实 Web/Headless Profile 安装 smoke。Profile smoke 使用 npm 当前最新的 DSH CLI（`0.1.2-rc.1`），检查 peer 解析和唯一 provider bundle row，并通过两个 surface 的 help 路径完成启动与无残留退出，全程不读取凭据。独立的源码合同门禁固定到已审查的 DSH `dsh-v0.1.3-alpha.1`（`d347e703908d0406b7a7ef80e3a0e594d86b2215`），并验证 provider 使用的导入 seam；由于该 alpha 尚未发布到 npm，这两个验证目标有意分开维护。稳定的 `ci / required` 是受保护分支的合并门禁。Actions 只有仓库只读权限，也不会获得 DeepSeek 凭据。
+已审核的 DSH/Node/pnpm 基线记录在 [docs/dsh-compatibility.md](docs/dsh-compatibility.md)。CI 在 Linux、Windows 上运行 keyless suite，从 PR 的精确 commit 验证安装（包括 fork PR），并启动干净的 Web 与 Headless Profile。`ci / required` 是合并门禁。
 
-Release 继续采用人工确认的 Git-only 流程：先针对当前 `main` 的精确 commit 和 package version 运行只读 `release-check`，再创建 annotated tag。Tag 触发的二次检查会验证 annotation、版本、`main` 历史、完整无密钥门禁以及从 tag 安装；通过后为不可变 tag 发布非 draft、非 prerelease 的 GitHub Release。Workflow 不创建或移动 tag，也不发布 npm。真实 provider e2e 保持在 CI 外；backend、prompt 或 score decoder 行为变化时必须进入 release 证据，其他变更在缺少 `DEEPSEEK_API_KEY` 时自行跳过。
+发布保持人工、仅 Git：先用 `release-check` 验证精确 `main` SHA，再创建不可移动的 annotated tag；tag 检查通过后发布非 draft 的 GitHub Release。真实 provider E2E 不进入 CI，并在 backend、prompt 或 decoder 行为变化时强制执行。
 
 ## 边界
 

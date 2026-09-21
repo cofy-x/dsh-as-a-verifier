@@ -1,19 +1,20 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 import { spawnSync } from 'node:child_process'
+import {
+  argument,
+  assertGitHubRepository,
+  assertPnpmVersion,
+  manifest as expected,
+  packageName as PACKAGE_NAME,
+  repository as DEFAULT_REPOSITORY,
+  root,
+} from './project.mjs'
 
-const PACKAGE_NAME = 'dsh-as-a-verifier'
-const REPOSITORY = 'omdsh-dev/dsh-as-a-verifier'
-const root = dirname(dirname(fileURLToPath(import.meta.url)))
-
-function argument(name) {
-  const index = process.argv.indexOf(name)
-  if (index < 0 || index + 1 >= process.argv.length) throw new Error(`missing ${name}`)
-  return process.argv[index + 1]
-}
+const REPOSITORY = assertGitHubRepository(argument('--repository', { required: false }) ?? DEFAULT_REPOSITORY)
 
 function run(command, args, cwd) {
   const executable = process.platform === 'win32' && command === 'pnpm' ? 'pnpm.cmd' : command
@@ -40,7 +41,7 @@ const resolvedCommit = exactCommitPattern.test(ref)
   : capture('git', ['rev-parse', `${ref}^{commit}`], root)
 if (!exactCommitPattern.test(resolvedCommit)) throw new Error(`could not resolve ${ref} to an exact commit`)
 
-const expected = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+assertPnpmVersion()
 const profilePeers = Object.keys(expected.peerDependencies ?? {}).map((name) => {
   const version = expected.devDependencies?.[name]
   if (typeof version !== 'string') throw new Error(`no audited smoke version is configured for peer ${name}`)

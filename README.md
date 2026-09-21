@@ -8,33 +8,33 @@ The native TypeScript implementation derives pairwise reward, PPT, and offline/o
 
 ## Install
 
-This repository is Git-installable and intentionally has `private: true`; npm publication is not supported in the MVP.
+This repository is Git-installable and intentionally has `private: true`; it is not published to npm.
 
 ```sh
-dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier
-dsh plugin --profile headless add github:omdsh-dev/dsh-as-a-verifier
+dsh plugin --profile web add github:cofy-x/dsh-as-a-verifier
+dsh plugin --profile headless add github:cofy-x/dsh-as-a-verifier
 ```
 
-An unqualified GitHub spec resolves the repository's default branch when pnpm installs or updates it. The selected commit is then frozen by the Profile lockfile; restarting DSH does not silently advance it. Update explicitly and restart the Profile:
+The default-branch install resolves once and is frozen by the Profile lockfile. Update explicitly, then restart the Profile:
 
 ```sh
 dsh plugin --profile web update dsh-as-a-verifier
 ```
 
-A Git install executes this package's self-contained `prepare` build. pnpm 10 and newer require a one-time explicit authorization in the selected profile's `pnpm-workspace.yaml`; copy the package key from the first installation error, then retry:
+A Git install runs this package's self-contained `prepare` build. Add the exact key reported by pnpm to `$DSH_HOME/profiles/<profile>/pnpm-workspace.yaml`, then retry:
 
 ```yaml
 allowBuilds:
-  dsh-as-a-verifier: true
+  dsh-as-a-verifier@https://codeload.github.com/cofy-x/dsh-as-a-verifier/tar.gz/<resolved-commit>: true
 ```
 
-For a reproducible stable deployment, pin the immutable release tag (or an audited commit):
+Use the exact key printed by pnpm. The content-addressed key authorizes only that resolved Git archive; a package-name-wide approval is intentionally not used.
+
+For a reproducible deployment, pin an immutable release tag (or an audited commit):
 
 ```sh
-dsh plugin --profile web add github:omdsh-dev/dsh-as-a-verifier#v0.2.6
+dsh plugin --profile web add github:cofy-x/dsh-as-a-verifier#v0.2.6
 ```
-
-Release tags are created only from a validated merge on `main` and are never moved. Backward-compatible fixes and capability additions increment the patch version; public API additions increment the minor version; an incompatible `ctx.verifier` contract requires a new protocol version and a major release.
 
 After installation, `dsh --profile web --dump-config` or the corresponding Headless profile should show exactly one `dsh-as-a-verifier` row.
 
@@ -137,6 +137,7 @@ Cache files contain only numeric rewards and token usage. They do not store the 
 ## Development
 
 ```sh
+corepack enable pnpm
 pnpm install
 pnpm run verify:self-contained
 pnpm run typecheck
@@ -145,9 +146,9 @@ pnpm run build
 pnpm run prepare
 ```
 
-Every pull request and `main` update runs the keyless suite on Ubuntu and Windows with Node 24 and the exact minimum Node 22.19.0, followed by exact-commit Git-install and real Web/Headless profile-install smokes on Node 24. The profile smoke uses the latest npm-published DSH CLI (`0.1.2-rc.1`), checks peer resolution and the single provider bundle row, boots each surface through its help path, and must exit cleanly without credentials. A separate source-contract gate pins the audited DSH `dsh-v0.1.3-alpha.1` release (`d347e703908d0406b7a7ef80e3a0e594d86b2215`) and verifies the imported provider seams. These targets are deliberately separate because the audited alpha release is not yet available from npm. The stable `ci / required` result is the protected-branch merge gate. Actions have read-only repository permission and receive no DeepSeek credential.
+The audited DSH/Node/pnpm baseline is recorded in [docs/dsh-compatibility.md](docs/dsh-compatibility.md). CI runs the keyless suite on Linux and Windows, validates installation from the exact PR commit (including fork PRs), and boots clean Web and Headless profiles. `ci / required` is the merge gate.
 
-Releases remain deliberate and Git-only. Run the read-only `release-check` workflow against the exact current `main` commit and package version, then create an annotated tag. A tag-triggered release check verifies the annotation, version, `main` ancestry, complete keyless suite, and installation from the tag. After it is green, publish a non-draft, non-prerelease GitHub Release for the immutable tag. The workflow never creates or moves tags and never publishes npm artifacts. Real-provider e2e remains outside CI; it is required in the release evidence when backend, prompt, or score-decoder behavior changes and otherwise self-skips without `DEEPSEEK_API_KEY`.
+Releases are Git-only and manual: validate the exact `main` SHA with `release-check`, create an annotated immutable tag, wait for the tag check, then publish a non-draft GitHub Release. Real-provider E2E stays outside CI and is required when backend, prompt, or decoder behavior changes.
 
 ## Boundaries
 
