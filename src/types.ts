@@ -109,6 +109,34 @@ export interface VerifierTrackResult {
   readonly final: number
   readonly verifierCalls: number
   readonly usage: VerifierUsage
+  /** Experimental provider observation. Omitted in the default `existing` mode; an online tracker reports its latest update. */
+  readonly evaluation?: VerifierProgressEvaluation
+}
+
+export interface VerifierProgressShadowEvaluation {
+  readonly provider: string
+  readonly model: string
+  readonly probability?: number
+  readonly threshold: number
+  readonly completed?: boolean
+  readonly disagreement?: boolean
+  readonly latencyMs: number
+  readonly cacheHit: boolean
+  readonly usage: VerifierUsage
+  readonly errorCode?: string
+}
+
+/** Structured, content-free metadata for experimental progress evaluation. */
+export interface VerifierProgressEvaluation {
+  readonly mode: 'jev' | 'jev-shadow'
+  readonly provider: string
+  readonly model: string
+  readonly rawScore: number
+  readonly threshold?: number
+  readonly completed?: boolean
+  readonly latencyMs: number
+  readonly cacheHits: number
+  readonly shadow?: VerifierProgressShadowEvaluation
 }
 
 /** Options captured by an online prefix-only progress tracker. */

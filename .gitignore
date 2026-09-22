@@ -3,4 +3,5 @@ node_modules/
 *.tsbuildinfo
 *.tgz
 coverage/
+benchmark-results/
 .pnpm-store/

@@ -46,6 +46,9 @@
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",
+    "docs",
+    "benchmarks",
+    "scripts/jev-benchmark.mjs",
     "THIRD_PARTY_NOTICES.md",
     "LICENSE"
   ],
@@ -147,5 +150,8 @@
       "hotReload": null,
       "remove": null
     }
+  },
+  "dependencies": {
+    "@typesafe-ai/sdk": "0.6.0"
   }
 }

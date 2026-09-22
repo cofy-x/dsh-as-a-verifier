@@ -22,6 +22,7 @@ import {
   type VerifierCompareResult,
   type VerifierCriterion,
   type VerifierCriterionScore,
+  type VerifierProgressEvaluation,
   type VerifierProgressTracker,
   type VerifierProgressTrackerOptions,
   type VerifierSelectRequest,
@@ -31,6 +32,7 @@ import {
   type VerifierTrackResult,
 } from './types.ts'
 import { UsageAccumulator } from './usage.ts'
+import type { ProgressEvaluation, ProgressEvaluator } from './evaluator/progress.ts'
 
 interface PairResult {
   readonly rewardA: number
@@ -111,6 +113,7 @@ export class VerifierService implements VerifierServiceApi {
     private readonly backend: VerifierBackend,
     private readonly cache: ScoreCache,
     private readonly progressCache = new ProgressCache(config.dataDir, config.cacheEnabled),
+    private readonly jevEvaluator?: ProgressEvaluator,
   ) {
     this.semaphore = new Semaphore(config.maxConcurrency)
   }
@@ -134,7 +137,9 @@ export class VerifierService implements VerifierServiceApi {
         throw new VerifierError(`trajectory exceeds configured character maximum ${this.config.maxProgressTrajectoryChars}`, 'LIMIT_EXCEEDED')
       }
       const checkpoints = request.checkpointSteps === undefined
-        ? (steps.length > 2 ? Array.from({ length: steps.length - 2 }, (_, index) => index + 2) : steps.map((_, index) => index + 1))
+        ? (this.config.progressEvaluatorMode === 'jev'
+            ? [steps.length]
+            : (steps.length > 2 ? Array.from({ length: steps.length - 2 }, (_, index) => index + 2) : steps.map((_, index) => index + 1)))
         : [...request.checkpointSteps]
       if (checkpoints.length === 0) throw new VerifierError('checkpointSteps must not be empty', 'INVALID_ARGUMENT')
       if (checkpoints.length > this.config.maxProgressCheckpoints) {
@@ -150,19 +155,122 @@ export class VerifierService implements VerifierServiceApi {
         }
       }
       const repeats = bounded(request.nEvaluations, this.config.nEvaluations, this.config.maxEvaluations, 'nEvaluations')
+      if (this.config.progressEvaluatorMode === 'jev') {
+        const jevStarted = performance.now()
+        if (this.jevEvaluator === undefined) throw new VerifierError('Jev evaluator is unavailable', 'JEV_UNAVAILABLE')
+        if (checkpoints.length !== 1 || checkpoints[0] !== steps.length) {
+          throw new VerifierError('Jev progress evaluation currently supports only the final checkpoint', 'JEV_FINAL_CHECKPOINT_ONLY')
+        }
+        const evaluations = await settleStrict(Array.from({ length: repeats }, (_, repeat) =>
+          this.jevEvaluator?.evaluate({ problem, steps, checkpointSteps: checkpoints, repeat, signal }) as Promise<ProgressEvaluation>))
+        const usage = new UsageAccumulator()
+        for (const evaluation of evaluations) usage.add(evaluation.usage)
+        const perEvaluationScores = evaluations.map(evaluation => [...evaluation.scores])
+        const scores = checkpoints.map((_, index) =>
+          perEvaluationScores.reduce((sum, evaluation) => sum + (evaluation[index] as number), 0) / repeats)
+        const snapshot = usage.snapshot()
+        const rawScore = scores.at(-1) as number
+        return {
+          steps: checkpoints,
+          scores,
+          perEvaluationScores,
+          final: rawScore,
+          verifierCalls: snapshot.calls,
+          usage: snapshot,
+          evaluation: {
+            mode: 'jev',
+            provider: this.jevEvaluator.id,
+            model: this.jevEvaluator.model,
+            rawScore,
+            threshold: this.config.jevCompletionThreshold,
+            completed: rawScore >= this.config.jevCompletionThreshold,
+            latencyMs: performance.now() - jevStarted,
+            cacheHits: evaluations.filter(evaluation => evaluation.cacheHit).length,
+          },
+        }
+      }
+
       const usage = new UsageAccumulator()
+      const existingStarted = performance.now()
       const perEvaluationScores = await settleStrict(Array.from({ length: repeats }, (_, repeat) =>
         this.scoreProgress(problem, steps, checkpoints, repeat, usage, signal)))
       const scores = checkpoints.map((_, index) =>
         perEvaluationScores.reduce((sum, evaluation) => sum + (evaluation[index] as number), 0) / repeats)
       const snapshot = usage.snapshot()
-      return {
+      const existingLatencyMs = performance.now() - existingStarted
+      const existingCacheHits = Math.max(0, repeats - snapshot.calls)
+      const result: VerifierTrackResult = {
         steps: checkpoints,
         scores,
         perEvaluationScores,
         final: scores.at(-1) as number,
         verifierCalls: snapshot.calls,
         usage: snapshot,
+      }
+      if (this.config.progressEvaluatorMode !== 'jev-shadow') return result
+      if (this.jevEvaluator === undefined) throw new VerifierError('Jev evaluator is unavailable', 'JEV_UNAVAILABLE')
+      const shadowStarted = performance.now()
+      const shadowUsage = new UsageAccumulator()
+      let shadowCacheHits = 0
+      try {
+        if (!checkpoints.includes(steps.length)) {
+          return {
+            ...result,
+            evaluation: {
+              mode: 'jev-shadow', provider: this.backend.id, model: this.backend.model,
+              rawScore: result.final, latencyMs: existingLatencyMs, cacheHits: existingCacheHits,
+              shadow: {
+                provider: this.jevEvaluator.id, model: this.jevEvaluator.model,
+                threshold: this.config.jevCompletionThreshold, latencyMs: 0, cacheHit: false,
+                usage: new UsageAccumulator().snapshot(), errorCode: 'JEV_FINAL_CHECKPOINT_ONLY',
+              },
+            },
+          }
+        }
+        const evaluations = await settleStrict(Array.from({ length: repeats }, async (_, repeat) => {
+          const evaluation = await this.jevEvaluator!.evaluate({ problem, steps, checkpointSteps: [steps.length], repeat, signal })
+          shadowUsage.add(evaluation.usage)
+          if (evaluation.cacheHit) shadowCacheHits += 1
+          return evaluation
+        }))
+        const probability = evaluations.reduce((sum, evaluation) => sum + (evaluation.probability as number), 0) / repeats
+        const completed = probability >= this.config.jevCompletionThreshold
+        return {
+          ...result,
+          evaluation: {
+            mode: 'jev-shadow', provider: this.backend.id, model: this.backend.model,
+            rawScore: result.final, latencyMs: existingLatencyMs, cacheHits: existingCacheHits,
+            shadow: {
+              provider: this.jevEvaluator.id,
+              model: this.jevEvaluator.model,
+              probability,
+              threshold: this.config.jevCompletionThreshold,
+              completed,
+              disagreement: completed !== (result.final >= this.config.jevShadowExistingThreshold),
+              latencyMs: performance.now() - shadowStarted,
+              cacheHit: evaluations.every(evaluation => evaluation.cacheHit),
+              usage: shadowUsage.snapshot(),
+            },
+          },
+        }
+      } catch (error) {
+        if (signal.aborted) throw error
+        return {
+          ...result,
+          evaluation: {
+            mode: 'jev-shadow', provider: this.backend.id, model: this.backend.model,
+            rawScore: result.final, latencyMs: existingLatencyMs, cacheHits: existingCacheHits,
+            shadow: {
+              provider: this.jevEvaluator.id,
+              model: this.jevEvaluator.model,
+              threshold: this.config.jevCompletionThreshold,
+              latencyMs: performance.now() - shadowStarted,
+              cacheHit: shadowCacheHits === repeats,
+              usage: shadowUsage.snapshot(),
+              errorCode: error instanceof VerifierError ? error.code : 'JEV_SDK_ERROR',
+            },
+          },
+        }
       }
     })
   }
@@ -403,6 +511,7 @@ class ProgressTracker implements VerifierProgressTracker {
   private readonly scores: number[] = []
   private readonly perEvaluationScores: number[][] = []
   private readonly usage = new UsageAccumulator()
+  private evaluation: VerifierProgressEvaluation | undefined
   private active: AbortController | undefined
   private activeTask: Promise<VerifierTrackResult> | undefined
   private disposed = false
@@ -442,6 +551,7 @@ class ProgressTracker implements VerifierProgressTracker {
         ;(this.perEvaluationScores[index] as number[]).push(evaluation[0] as number)
       })
       this.usage.add(result.usage)
+      this.evaluation = result.evaluation
       return result.final
     } finally {
       options.signal?.removeEventListener('abort', onAbort)
@@ -460,6 +570,7 @@ class ProgressTracker implements VerifierProgressTracker {
       final: this.scores.at(-1) as number,
       verifierCalls: usage.calls,
       usage,
+      ...(this.evaluation === undefined ? {} : { evaluation: this.evaluation }),
     }
   }
 

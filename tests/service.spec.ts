@@ -5,12 +5,64 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { ScoreCache } from '../src/cache/score-cache.ts'
 import { VerifierService } from '../src/service.ts'
 import { PromptBackend, resolvedConfig, scoreDistribution, zeroUsage } from './helpers.ts'
+import type { ProgressEvaluator } from '../src/evaluator/progress.ts'
 
 const criterion = { id: 'correct', name: 'Correctness', description: 'Judge correctness from the trace.' }
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))) })
 
 describe('verifier service', () => {
+  it('waits for an in-flight shadow evaluator to settle on service disposal', async () => {
+    let started!: () => void
+    let active = 0
+    const ready = new Promise<void>(resolve => { started = resolve })
+    const evaluator: ProgressEvaluator = {
+      id: 'jev-test', model: 'jev-1.13.0', finalCheckpointOnly: true,
+      async evaluate(request) {
+        active += 1
+        started()
+        try {
+          return await new Promise<never>((_resolve, reject) => {
+            const abort = (): void => reject(new Error('cancelled'))
+            if (request.signal.aborted) abort()
+            else request.signal.addEventListener('abort', abort, { once: true })
+          })
+        } finally { active -= 1 }
+      },
+    }
+    const service = new VerifierService(resolvedConfig({ progressEvaluatorMode: 'jev-shadow', nEvaluations: 1 }), new PromptBackend(), new ScoreCache('unused', false), undefined, evaluator)
+    const pending = service.track({ problem: 'task', steps: ['output'] })
+    const rejected = expect(pending).rejects.toThrow()
+    await ready
+    await service.dispose()
+    await rejected
+    expect(active).toBe(0)
+    await expect(service.track({ problem: 'task', steps: ['later'] })).rejects.toMatchObject({ code: 'DISPOSED' })
+  })
+  it('retains successful shadow usage when another repeat fails', async () => {
+    const evaluator: ProgressEvaluator = {
+      id: 'jev-test', model: 'jev-1.13.0', finalCheckpointOnly: true,
+      async evaluate(request) {
+        if (request.repeat === 1) throw new Error('failure')
+        return { scores: [0.9], probability: 0.9, provider: 'jev-test', model: 'jev-1.13.0', latencyMs: 1, cacheHit: false, usage: zeroUsage }
+      },
+    }
+    const service = new VerifierService(resolvedConfig({ progressEvaluatorMode: 'jev-shadow' }), new PromptBackend(), new ScoreCache('unused', false), undefined, evaluator)
+    const result = await service.track({ problem: 'task', steps: ['output'], checkpointSteps: [1] })
+    expect(result.evaluation?.shadow).toMatchObject({ errorCode: 'JEV_SDK_ERROR', usage: { calls: 1, inputTokens: 10 } })
+    expect(result.verifierCalls).toBe(2)
+    await service.dispose()
+  })
+  function jevEvaluator(probability = 0.97, failure?: Error): ProgressEvaluator {
+    return {
+      id: 'jev-test', model: 'jev-1.13.0', finalCheckpointOnly: true,
+      async evaluate() {
+        if (failure !== undefined) throw failure
+        return { scores: [probability], probability, provider: 'jev-test', model: 'jev-1.13.0', latencyMs: 3, cacheHit: false, usage: zeroUsage }
+      },
+    }
+  }
+
   it('publishes an immutable protocol and capability contract', () => {
     const service = new VerifierService(resolvedConfig(), new PromptBackend(), new ScoreCache('unused', false))
     expect(service.protocolVersion).toBe(1)
@@ -32,6 +84,55 @@ describe('verifier service', () => {
     expect(result.perEvaluationScores).toEqual([[10 / 19, 1], [10 / 19, 1]])
     expect(result.final).toBe(1)
     expect(result.verifierCalls).toBe(2)
+  })
+
+  it('uses Jev only when explicitly selected and preserves raw probability plus threshold decision', async () => {
+    const service = new VerifierService(
+      resolvedConfig({ progressEvaluatorMode: 'jev', nEvaluations: 1 }), new PromptBackend(), new ScoreCache('unused', false), undefined, jevEvaluator(0.94),
+    )
+    const result = await service.track({ problem: 'task', steps: ['verified result'], checkpointSteps: [1], nEvaluations: 1 })
+    expect(result.final).toBe(0.94)
+    expect(result.evaluation).toMatchObject({ mode: 'jev', rawScore: 0.94, threshold: 0.95, completed: false })
+    const boundary = new VerifierService(
+      resolvedConfig({ progressEvaluatorMode: 'jev', nEvaluations: 1, jevCompletionThreshold: 0.94 }), new PromptBackend(), new ScoreCache('unused', false), undefined, jevEvaluator(0.94),
+    )
+    expect((await boundary.track({ problem: 'task', steps: ['verified result'], nEvaluations: 1 })).evaluation?.completed).toBe(true)
+    const defaultFinal = await service.track({ problem: 'task', steps: ['a', 'b', 'verified result'], nEvaluations: 1 })
+    expect(defaultFinal.steps).toEqual([3])
+    const tracker = service.createProgressTracker({ problem: 'task', nEvaluations: 1 })
+    await tracker.update('verified result')
+    expect(tracker.result().evaluation).toMatchObject({ mode: 'jev', rawScore: 0.94, completed: false })
+    await tracker.dispose()
+    await expect(service.track({ problem: 'task', steps: ['a', 'b'], checkpointSteps: [1], nEvaluations: 1 }))
+      .rejects.toMatchObject({ code: 'JEV_FINAL_CHECKPOINT_ONLY' })
+  })
+
+  it('records shadow disagreement without changing existing scores or failure behavior', async () => {
+    const existing = new PromptBackend()
+    const service = new VerifierService(
+      resolvedConfig({ progressEvaluatorMode: 'jev-shadow', nEvaluations: 1 }), existing, new ScoreCache('unused', false), undefined, jevEvaluator(0.1),
+    )
+    const result = await service.track({ problem: 'task', steps: ['verified result'], checkpointSteps: [1], nEvaluations: 1 })
+    const baseline = await new VerifierService(
+      resolvedConfig({ nEvaluations: 1 }), new PromptBackend(), new ScoreCache('unused', false),
+    ).track({ problem: 'task', steps: ['verified result'], checkpointSteps: [1], nEvaluations: 1 })
+    const { evaluation: _shadowMetadata, ...authoritative } = result
+    expect(authoritative).toEqual(baseline)
+    expect(result.evaluation?.shadow).toMatchObject({ probability: 0.1, completed: false, disagreement: true })
+
+    const failedShadow = new VerifierService(
+      resolvedConfig({ progressEvaluatorMode: 'jev-shadow', nEvaluations: 1 }), new PromptBackend(), new ScoreCache('unused', false), undefined, jevEvaluator(0, new Error('offline')),
+    )
+    const fallback = await failedShadow.track({ problem: 'task', steps: ['verified result'], checkpointSteps: [1], nEvaluations: 1 })
+    expect(fallback.final).toBe(1)
+    expect(fallback.evaluation?.shadow?.errorCode).toBe('JEV_SDK_ERROR')
+  })
+
+  it('fails explicit Jev mode on evaluator errors', async () => {
+    const service = new VerifierService(
+      resolvedConfig({ progressEvaluatorMode: 'jev', nEvaluations: 1 }), new PromptBackend(), new ScoreCache('unused', false), undefined, jevEvaluator(0, new Error('offline')),
+    )
+    await expect(service.track({ problem: 'task', steps: ['result'], checkpointSteps: [1], nEvaluations: 1 })).rejects.toThrow('offline')
   })
 
   it('enforces progress bounds and strictly increasing checkpoints', async () => {

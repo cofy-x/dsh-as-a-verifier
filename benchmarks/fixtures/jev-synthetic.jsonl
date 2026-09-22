@@ -1,0 +1,4 @@
+{"id":"en-complete","problem":"Create the requested file and verify its contents.","steps":["Created the file.","Read it back and confirmed the expected contents."],"label":true,"language":"en","outcome":"success"}
+{"id":"en-incomplete","problem":"Fix the parser and run its tests.","steps":["Inspected the parser failure but made no change."],"label":false,"language":"en","outcome":"failure"}
+{"id":"zh-complete","problem":"修复解析器并运行测试。","steps":["完成了解析器修复。","运行相关测试并全部通过。"],"label":true,"language":"zh","outcome":"success"}
+{"id":"zh-incomplete","problem":"修复解析器并运行测试。","steps":["定位了失败原因，但尚未修改代码或运行测试。"],"label":false,"language":"zh","outcome":"failure"}
