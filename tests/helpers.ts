@@ -16,6 +16,7 @@ export const zeroUsage: VerifierUsage = {
 
 export function resolvedConfig(overrides: Partial<ResolvedConfig> = {}): ResolvedConfig {
   return {
+    progressEvaluatorMode: 'existing',
     model: 'deepseek-v4-flash',
     baseURL: 'https://api.deepseek.com',
     apiKeyEnv: 'DEEPSEEK_API_KEY' as ResolvedConfig['apiKeyEnv'],
@@ -34,6 +35,14 @@ export function resolvedConfig(overrides: Partial<ResolvedConfig> = {}): Resolve
     maxConcurrency: 8,
     requestTimeoutMs: 120_000,
     retryAttempts: 3,
+    jevModel: 'jev-1.13.0',
+    jevBaseURL: 'https://api.typesafe.ai',
+    jevApiKeyEnv: 'TYPESAFE_API_KEY' as ResolvedConfig['jevApiKeyEnv'],
+    jevCompletionThreshold: 0.95,
+    jevShadowExistingThreshold: 0.85,
+    jevTimeoutMs: 10_000,
+    jevRetryAttempts: 1,
+    jevMaxConcurrency: 4,
     cacheEnabled: false,
     dataDir: resolve('test-data'),
     ...overrides,

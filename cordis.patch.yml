@@ -2,6 +2,8 @@
 - insert:
     - id: dsh-as-a-verifier
       name: dsh-as-a-verifier
+      # Jev is intentionally not enabled by the bundle. Operators may opt in
+      # with config.progressEvaluatorMode after reviewing docs/jev-experiment.md.
 
 # No invariant row: the shipped Web and Headless profiles do not guarantee the
 # invariants service, and the MVP owns no long-lived event/data relationship.

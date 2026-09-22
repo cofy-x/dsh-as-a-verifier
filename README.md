@@ -87,6 +87,8 @@ await tracker.dispose()
 
 `track()` returns strict checkpoint scores, raw per-evaluation curves, final score, calls, and usage. With more than two steps its default checkpoints are `2..T-1`; shorter trajectories score every step. Checkpoints are 1-based, unique, and strictly increasing. `createProgressTracker()` scores only the prefix available at each update, so later steps cannot influence earlier scores.
 
+An opt-in TypeSafe Jev experiment can evaluate final completion through the same `track()` API. `existing` remains the default; `jev-shadow` records a non-authoritative comparison, and `jev` explicitly selects Jev for final-checkpoint evaluation. Jev is not a production-calibrated or automatic review gate. See [docs/jev-experiment.md](docs/jev-experiment.md) for its Node 24 requirement, data boundary, benchmark, and promotion criteria.
+
 The `verifier_select` tool accepts the same problem, string candidates, and criteria. Its optional arguments are named `n_evaluations`, `pivots`, and `seed`; deployment ceilings always win over tool input. `verifier_track` accepts `problem`, `steps`, optional `checkpoint_steps`, and `n_evaluations`. Both use generic cards and declare no file locations.
 
 ## Configuration
@@ -109,6 +111,14 @@ The `verifier_select` tool accepts the same problem, string candidates, and crit
 | `maxConcurrency` | `8` | Maximum simultaneous HTTP calls |
 | `requestTimeoutMs` | `120000` | Timeout for each HTTP attempt |
 | `retryAttempts` | `3` | Total bounded attempts for retryable failures |
+| `progressEvaluatorMode` | `existing` | `existing`, experimental `jev-shadow`, or explicit `jev` |
+| `jevModel` | `jev-1.13.0` | Exact immutable Jev model ID; aliases are rejected |
+| `jevBaseURL` | `TYPESAFE_BASE_URL`, else `https://api.typesafe.ai` | TypeSafe API origin |
+| `jevApiKeyEnv` | `TYPESAFE_API_KEY` | Jev credential reference |
+| `jevCompletionThreshold` | `0.95` | Experimental Jev completion threshold; not equivalent to A–T progress |
+| `jevShadowExistingThreshold` | `0.85` | Existing-score decision threshold used only for shadow disagreement |
+| `jevTimeoutMs` / `jevRetryAttempts` | `10000` / `1` | Jev timeout and total attempt count |
+| `jevMaxConcurrency` | `4` | Jev request concurrency ceiling |
 | `cacheEnabled` | `true` | Enable persistent numeric score cache |
 | `dataDir` | `$DSH_HOME/as-a-verifier` | Plugin data directory |
 
@@ -133,7 +143,7 @@ Missing score-position logprobs, no valid A–T alternatives, malformed JSON, in
 
 Pairwise and progress caches use separate versioned namespaces. Progress identity covers backend, model, prompt version, problem, complete steps, checkpoints, and repeat. Pairwise identity covers prompt/schema version, backend, model, problem, ordered candidates, complete criterion, repetition, and slot order. Every identity is hashed with SHA-256. Versioned entries are atomically replaced with owner-only permissions; corrupt or incompatible entries are misses.
 
-Cache files contain only numeric rewards and token usage. They do not store the raw task, trajectories, prompts, model responses, API keys, or reasoning traces. API calls necessarily send the problem and relevant trajectory content to the configured DeepSeek endpoint: either two candidates and one criterion, or the progress steps and checkpoints. Credentials are resolved immediately before every HTTP request and never enter configuration, logs, cache entries, or test snapshots.
+Cache files contain only numeric rewards and token usage. They do not store the raw task, trajectories, prompts, model responses, API keys, or reasoning traces. API calls necessarily send the problem and relevant trajectory content to the configured DeepSeek endpoint: either two candidates and one criterion, or the progress steps and checkpoints. When Jev is enabled, the objective and observed final trajectory are also sent to the configured TypeSafe endpoint; its separate cache stores only raw probability, exact model, and usage. Credentials are resolved immediately before every request and never enter configuration, logs, cache entries, or test snapshots.
 
 ## Development
 
@@ -145,6 +155,7 @@ pnpm run typecheck
 pnpm test
 pnpm run build
 pnpm run prepare
+node scripts/jev-benchmark.mjs dry-run --input benchmarks/fixtures/jev-synthetic.jsonl
 ```
 
 The audited DSH/Node/pnpm baseline is recorded in [docs/dsh-compatibility.md](docs/dsh-compatibility.md). CI runs the keyless suite on Linux and Windows, validates installation from the exact PR commit (including fork PRs), and boots clean Web and Headless profiles. `ci / required` is the merge gate.

@@ -87,6 +87,8 @@ await tracker.dispose()
 
 `track()` 返回 checkpoint 分数、逐 evaluation 原始曲线、最终分数、调用数和 usage。超过两个 step 时默认评分 `2..T-1`，更短轨迹评分全部 step；checkpoint 使用 1-based、唯一且严格递增的编号。`createProgressTracker()` 每次只评分当时可见的完整 prefix，未来步骤不会影响过去分数。
 
+可选的 TypeSafe Jev 实验可通过同一个 `track()` API 判断最终完成度。默认仍是 `existing`；`jev-shadow` 只记录不参与决策的对照结果，`jev` 则显式选择 Jev 评估最终 checkpoint。Jev 尚未完成生产校准，也不是自动 review 门禁。Node 24 要求、数据边界、benchmark 和晋级条件见 [docs/jev-experiment.md](docs/jev-experiment.md)。
+
 `verifier_select` 接受同样的 problem、字符串 candidates 和 criteria，可选参数为 `n_evaluations`、`pivots`、`seed`；`verifier_track` 接受 `problem`、`steps`、可选 `checkpoint_steps` 与 `n_evaluations`。部署上限始终优先，两个工具都使用 generic card 且不声明文件位置。
 
 ## 配置
@@ -109,6 +111,14 @@ await tracker.dispose()
 | `maxConcurrency` | `8` | 最大并行 HTTP 调用数 |
 | `requestTimeoutMs` | `120000` | 每次 HTTP attempt 超时 |
 | `retryAttempts` | `3` | 可重试错误的总 attempt 数 |
+| `progressEvaluatorMode` | `existing` | `existing`、实验性的 `jev-shadow` 或显式 `jev` |
+| `jevModel` | `jev-1.13.0` | 精确、不可移动的 Jev 模型 ID；拒绝 alias |
+| `jevBaseURL` | `TYPESAFE_BASE_URL`，否则 `https://api.typesafe.ai` | TypeSafe API origin |
+| `jevApiKeyEnv` | `TYPESAFE_API_KEY` | Jev 凭据引用 |
+| `jevCompletionThreshold` | `0.95` | 实验阈值，与 A–T progress 分数不等价 |
+| `jevShadowExistingThreshold` | `0.85` | 仅用于 shadow disagreement 的 existing 分数阈值 |
+| `jevTimeoutMs` / `jevRetryAttempts` | `10000` / `1` | Jev 超时与总 attempt 数 |
+| `jevMaxConcurrency` | `4` | Jev 请求并发上限 |
 | `cacheEnabled` | `true` | 启用持久化数值评分缓存 |
 | `dataDir` | `$DSH_HOME/as-a-verifier` | 插件数据目录 |
 
@@ -133,7 +143,7 @@ verifier calls = comparisons × criteria × nEvaluations
 
 Pairwise 与 progress 使用独立版本化缓存。Progress identity 包含 backend、model、prompt version、problem、完整 steps、checkpoints 和 repeat；pairwise 保留原有 identity。全部 identity 在写入文件系统前使用 SHA-256。损坏或版本不匹配一律按 miss 处理。
 
-缓存文件只保存数值 reward 和 token usage，不保存原始任务、候选轨迹、prompt、模型响应、API key 或 reasoning trace。API 调用会发送 problem 与相关轨迹：pairwise 是两个候选和一个 criterion，progress 是全部 steps 与 checkpoints。凭据在每次 HTTP 请求前重新解析，从不进入配置、日志、缓存或测试快照。
+缓存文件只保存数值 reward 和 token usage，不保存原始任务、候选轨迹、prompt、模型响应、API key 或 reasoning trace。API 调用会发送 problem 与相关轨迹：pairwise 是两个候选和一个 criterion，progress 是全部 steps 与 checkpoints。启用 Jev 时，objective 与已观察到的最终轨迹还会发送到配置的 TypeSafe endpoint；独立 Jev 缓存只保存原始概率、精确模型和 usage。凭据在每次请求前重新解析，从不进入配置、日志、缓存或测试快照。
 
 ## 开发
 
@@ -145,6 +155,7 @@ pnpm run typecheck
 pnpm test
 pnpm run build
 pnpm run prepare
+node scripts/jev-benchmark.mjs dry-run --input benchmarks/fixtures/jev-synthetic.jsonl
 ```
 
 已审核的 DSH/Node/pnpm 基线记录在 [docs/dsh-compatibility.md](docs/dsh-compatibility.md)。CI 在 Linux、Windows 上运行 keyless suite，从 PR 的精确 commit 验证安装（包括 fork PR），并启动干净的 Web 与 Headless Profile。`ci / required` 是合并门禁。

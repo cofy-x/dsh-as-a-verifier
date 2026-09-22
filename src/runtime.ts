@@ -9,6 +9,7 @@ import { resolveConfig, type Config } from './config.ts'
 import { VerifierService } from './service.ts'
 import { registerVerifierTools } from './tools.ts'
 import { VerifierError, type VerifierServiceApi } from './types.ts'
+import { assertJevRuntime, JevProgressEvaluator } from './evaluator/jev.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -21,21 +22,31 @@ declare module '@deepseek-ai/cordis' {
 export function apply(ctx: Context, config: Config): void {
   const environment = launchEnvironmentOf(ctx)
   const resolved = resolveConfig(config, environment)
-  const resolveApiKey = async (): Promise<string | undefined> => {
+  assertJevRuntime(resolved.progressEvaluatorMode)
+  const resolveCredential = async (ref: string): Promise<string | undefined> => {
     const credentials = ctx.get('credentials') as { resolve(ref: string): Promise<{ value: string } | undefined> } | undefined
     const raw = credentials === undefined
-      ? environment.get(resolved.apiKeyEnv)?.value
-      : (await credentials.resolve(resolved.apiKeyEnv))?.value
+      ? environment.get(ref)?.value
+      : (await credentials.resolve(ref))?.value
     const value = raw?.trim()
     if (value === undefined || value.length === 0) return undefined
     if (!/^[\x21-\x7e]+$/u.test(value)) {
-      throw new VerifierError(`credential ${resolved.apiKeyEnv} contains invalid characters`, 'INVALID_CREDENTIAL')
+      throw new VerifierError(`credential ${ref} contains invalid characters`, 'INVALID_CREDENTIAL')
     }
     return value
   }
-  const backend = new DeepSeekBackend({ config: resolved, resolveApiKey })
+  const backend = new DeepSeekBackend({ config: resolved, resolveApiKey: () => resolveCredential(resolved.apiKeyEnv) })
   const cache = new ScoreCache(resolved.dataDir, resolved.cacheEnabled)
-  const verifier = new VerifierService(resolved, backend, cache, new ProgressCache(resolved.dataDir, resolved.cacheEnabled))
+  const jevEvaluator = resolved.progressEvaluatorMode === 'existing'
+    ? undefined
+    : new JevProgressEvaluator(resolved, () => resolveCredential(resolved.jevApiKeyEnv))
+  const verifier = new VerifierService(
+    resolved,
+    backend,
+    cache,
+    new ProgressCache(resolved.dataDir, resolved.cacheEnabled),
+    jevEvaluator,
+  )
   ctx.provide('verifier', verifier)
   registerVerifierTools(ctx, verifier)
   ctx.effect(() => async () => { await verifier.dispose() }, 'dsh-as-a-verifier: operations')
